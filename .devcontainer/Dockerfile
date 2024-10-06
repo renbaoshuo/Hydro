@@ -5,5 +5,5 @@ RUN npm install -g yarn && \
     mkdir -p /root/.hydro /data/file && chmod +x /usr/bin/sandbox && \
     chown -R root:root /root /root/.hydro /data/file && \
     echo '{"uri":"mongodb://mongo/hydro"}' > /root/.hydro/config.json && \
-    echo '["@hydrooj/ui-default","@hydrooj/hydrojudge"]' > /root/.hydro/addon.json
+    echo '["fzu-hydro-frontend","@hydrooj/hydrojudge"]' > /root/.hydro/addon.json
 ENTRYPOINT sandbox

@@ -20,5 +20,8 @@
 		2333,
 		8000
 	],
-	"postCreateCommand": "git submodule update --init && yarn install && npx hydrooj cli system set server.port 2333 && npx hydrooj cli user create root@hydro.local root rootroot 2 && npx hydrooj cli user setSuperAdmin 2"
+	"postCreateCommand": "git submodule update --init && yarn install && npx hydrooj cli system set server.port 2333 && npx hydrooj cli user create root@hydro.local root rootroot 2 && npx hydrooj cli user setSuperAdmin 2",
+	"mounts": [
+		"source=/home/baoshuo/data/yalc,target=/yalc,type=bind,consistency=cached"
+	]
 }
