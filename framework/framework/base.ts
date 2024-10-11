@@ -78,9 +78,6 @@ export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
                 }
                 response.type = 'application/json';
             } else if (response.template) {
-                if (typeof response.body === 'object') {
-                    response.body.template = response.template;
-                }
                 response.body = await handler.renderHTML(response.template, response.body || {});
                 response.type = 'text/html';
             }
