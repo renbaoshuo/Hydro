@@ -61,6 +61,4 @@ __*
 # Monokle
 .monokle
 
-# [BS] Yalc
-.yalc/
-yalc.lock
+packages/*/public/assets

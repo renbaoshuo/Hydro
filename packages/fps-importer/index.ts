@@ -26,7 +26,7 @@ class FpsProblemImportHandler extends Handler {
                 samples: p.sample_input?.map((input, i) => [input, p.sample_output[i]]),
                 hint: p.hint?.[0],
                 source: p.source?.join(' '),
-            }, 'html').replace(/<math xm<x>lns=/g, '<math xmlns=').replace(/\[\/?md]/g, '');
+            }, 'html', (s) => this.translate(s)).replace(/<math xm<x>lns=/g, '<math xmlns=').replace(/\[\/?md]/g, '');
             const config: ProblemConfigFile = {
                 time: p.time_limit[0]._ + p.time_limit[0].$.unit,
                 memory: p.memory_limit[0]._ + p.memory_limit[0].$.unit,
@@ -47,7 +47,7 @@ class FpsProblemImportHandler extends Handler {
                 // `filename` attribute introduced by winterant/OnlineJudge
                 // PLEASE, respect the spec
                 const filename = node.$?.filename || `${id}.${ext}`;
-                const c = node._ || node;
+                const c = node._ || (typeof node === 'string' ? node : '');
                 tasks.push(ProblemModel.addTestdata(domainId, pid, filename, Buffer.from(c)));
             };
             if (p.test_output) {

@@ -43,10 +43,14 @@ export interface EventMap extends KnownHandlerEvents {
     'monitor/collect': (info: any) => VoidReturn
     'api/update': () => void;
     'task/daily': () => void;
+    'task/daily/finish': (pref: Record<string, number>) => void;
 
     'user/message': (uid: number, mdoc: MessageDoc) => void
     'user/get': (udoc: User) => void
     'user/delcache': (content: string | true) => void
+
+    'user/import/parse': (payload: any) => VoidReturn
+    'user/import/create': (uid: number, udoc: any) => VoidReturn
 
     'domain/create': (ddoc: DomainDoc) => VoidReturn
     'domain/before-get': (query: Filter<DomainDoc>) => VoidReturn

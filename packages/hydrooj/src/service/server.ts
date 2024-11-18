@@ -32,6 +32,7 @@ declare module '@hydrooj/framework' {
         domain: DomainDoc;
 
         paginate<T>(cursor: FindCursor<T>, page: number, key: string): Promise<[docs: T[], numPages: number, count: number]>;
+        paginate<T>(cursor: FindCursor<T>, page: number, limit: number): Promise<[docs: T[], numPages: number, count: number]>;
         progress(message: string, params: any[]): void;
         limitRate(op: string, periodSecs: number, maxOperations: number, defaultKey?: string): Promise<void>;
         renderTitle(str: string): string;
@@ -196,8 +197,8 @@ export async function apply(ctx: Context) {
             url(name: string, ...kwargsList: Record<string, any>[]) {
                 if (name === '#') return '#';
                 let res = '#';
-                const args: any = {};
-                const query: any = {};
+                const args: any = Object.create(null);
+                const query: any = Object.create(null);
                 for (const kwargs of kwargsList) {
                     for (const key in kwargs) {
                         if (kwargs[key] instanceof ObjectId) args[key] = kwargs[key].toHexString();
@@ -237,8 +238,8 @@ export async function apply(ctx: Context) {
                     : str.toString().translate(...this.context.acceptsLanguages(), system.get('server.language'));
                 return res;
             },
-            paginate<T>(cursor: FindCursor<T>, page: number, key: string) {
-                return db.paginate(cursor, page, this.ctx.setting.get(`pagination.${key}`) || 20);
+            paginate<T>(cursor: FindCursor<T>, page: number, key: string | number) {
+                return db.paginate(cursor, page, typeof key === 'number' ? key : (this.ctx.setting.get(`pagination.${key}`) || 20));
             },
             checkPerm(...args: bigint[]) {
                 if (!this.user.hasPerm(...args)) {

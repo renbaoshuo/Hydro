@@ -23,7 +23,7 @@ import serializer from './serializer';
 
 export { WebSocket, WebSocketServer } from 'ws';
 
-const kHandler = Symbol.for('hydro.handler');
+export const kHandler = Symbol.for('hydro.handler');
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent
 export function encodeRFC5987ValueChars(str: string) {
@@ -111,7 +111,7 @@ export interface UserModel {
 
 export interface HandlerCommon { }
 export class HandlerCommon {
-    static [kHandler] = true;
+    static [kHandler]: string | boolean = true;
     session: Record<string, any>;
     args: Record<string, any>;
     request: HydroRequest;
@@ -141,8 +141,8 @@ export class HandlerCommon {
     url(name: string, ...kwargsList: Record<string, any>[]) {
         if (name === '#') return '#';
         let res = '#';
-        const args: any = {};
-        const query: any = {};
+        const args: any = Object.create(null);
+        const query: any = Object.create(null);
         for (const kwargs of kwargsList) {
             for (const key in kwargs) {
                 args[key] = kwargs[key].toString().replace(/\//g, '%2F');
@@ -313,7 +313,7 @@ function executeMiddlewareStack(context: any, middlewares: { name: string, func:
     return dispatch(0);
 }
 
-interface WebServiceConfig {
+export interface WebServiceConfig {
     keys: string[];
     proxy: boolean;
     cors?: string;
@@ -325,14 +325,14 @@ interface WebServiceConfig {
 }
 
 export class WebService extends Service {
-    private registry: Record<string, any> = {};
+    private registry: Record<string, any> = Object.create(null);
     private registrationCount = Counter();
     private serverLayers = [];
     private handlerLayers = [];
     private wsLayers = [];
-    private captureAllRoutes = {};
+    private captureAllRoutes = Object.create(null);
 
-    renderers: Record<string, RendererFunction> = {};
+    renderers: Record<string, RendererFunction> = Object.create(null);
     server = koa;
     router = router;
     HandlerCommon = HandlerCommon;
@@ -459,6 +459,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         const h = new HandlerClass(ctx, this.ctx);
         ctx.handler = h;
         const method = ctx.method.toLowerCase();
+        const name = (typeof HandlerClass[kHandler] === 'string' ? HandlerClass[kHandler] : HandlerClass.name).replace(/Handler$/, '');
         try {
             const operation = (method === 'post' && ctx.request.body?.operation)
                 ? `_${ctx.request.body.operation}`.replace(/_([a-z])/gm, (s) => s[1].toUpperCase())
@@ -479,7 +480,6 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 throw new MethodNotAllowedError(method);
             }
 
-            const name = HandlerClass.name.replace(/Handler$/, '');
             const steps = [
                 'log/__init', 'init', 'handler/init',
                 `handler/before-prepare/${name}#${method}`, `handler/before-prepare/${name}`, 'handler/before-prepare',
@@ -516,7 +516,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             }
         } catch (e) {
             try {
-                await this.ctx.serial(`handler/error/${HandlerClass.name.replace(/Handler$/, '')}`, h, e);
+                await this.ctx.serial(`handler/error/${name}`, h, e);
                 await this.ctx.serial('handler/error', h, e);
                 await h.onerror(e);
             } catch (err) {
@@ -596,7 +596,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
 
     private register(type: 'route' | 'conn', routeName: string, path: string, HandlerClass: any, ...permPrivChecker) {
         if (!HandlerClass?.[kHandler] || !isClass(HandlerClass)) throw new Error('Invalid registration.');
-        const name = HandlerClass.name;
+        const name = typeof HandlerClass[kHandler] === 'string' ? HandlerClass[kHandler] : HandlerClass.name;
         if (this.registrationCount[name] && this.registry[name] !== HandlerClass) {
             logger.warn('Route with name %s already exists.', name);
         }
@@ -697,7 +697,7 @@ declare module 'cordis' {
     }
 }
 
-export async function apply(ctx: Context, config) {
+export async function apply(ctx: Context, config: WebServiceConfig) {
     ctx.provide('server', undefined, true);
     ctx.server = new WebService(ctx, config);
 }
