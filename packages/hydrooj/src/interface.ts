@@ -223,6 +223,29 @@ export interface ProblemConfig {
     hackable?: boolean;
 }
 
+export enum ProblemTagType {
+    Default = 'default',
+    Algorithm = 'algorithm',
+    Source = 'source',
+    Time = 'time',
+    Region = 'region',
+}
+
+export const problemTagTypes = {
+    Default: ProblemTagType.Default,
+    Algorithm: ProblemTagType.Algorithm,
+    Source: ProblemTagType.Source,
+    Time: ProblemTagType.Time,
+    Region: ProblemTagType.Region,
+};
+
+export interface ProblemTag {
+    _id: string;
+    domainId: string;
+    content: string; // with i18n support like ProblemDoc.content
+    type: ProblemTagType;
+}
+
 export type Content = string | Record<string, string>;
 
 export interface Document {
@@ -244,7 +267,7 @@ declare module './model/problem' {
         content: string;
         nSubmit: number;
         nAccept: number;
-        tag: string[];
+        tag: string[]; // stores tag id
         data: FileInfo[];
         additional_file: FileInfo[];
         hidden?: boolean;

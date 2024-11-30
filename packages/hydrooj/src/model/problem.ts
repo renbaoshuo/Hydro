@@ -12,7 +12,8 @@ import { Logger, size, streamToBuffer } from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
 import { FileUploadError, ProblemNotFoundError, ValidationError } from '../error';
 import type {
-    Document, ProblemConfigFile, ProblemDict, ProblemStatusDoc, User,
+    Document, ProblemConfigFile, ProblemDict, ProblemStatusDoc, ProblemTag,
+    ProblemTagType, User,
 } from '../interface';
 import { parseConfig } from '../lib/testdataConfig';
 import * as bus from '../service/bus';
@@ -224,6 +225,16 @@ export class ProblemModel {
             $set.sort = sortable(`P${_id}`, ddoc.namespaces);
         } else if ($set.pid) {
             $set.sort = sortable($set.pid, ddoc.namespaces);
+        }
+        if ($set.tag) {
+            const _tags: string[] = [];
+            for (const tag of $set.tag) {
+                const tagDoc = await ProblemModel.getTag(domainId, tag);
+                if (tagDoc) {
+                    _tags.push(tag);
+                }
+            }
+            $set.tag = _tags;
         }
         await bus.parallel('problem/before-edit', $set);
         const result = await document.set(domainId, document.TYPE_PROBLEM, _id, $set, delpid ? { pid: '' } : undefined);
@@ -660,6 +671,31 @@ export class ProblemModel {
         if (res.status) throw new Error(`Error: Exited with code ${res.status}`);
         const stat = fs.statSync(target);
         console.log(`Domain ${domainId} problems export saved at ${target} , size: ${size(stat.size)}`);
+    }
+
+    static async listTags(domainId: string, query: Filter<ProblemTag>) {
+        return document.getMulti(domainId, document.TYPE_PROBLEM_TAG, query).toArray();
+    }
+
+    static async getTag(domainId: string, _id: string) {
+        return document.get(domainId, document.TYPE_PROBLEM_TAG, _id);
+    }
+
+    static async createTag(domainId: string, content: string, type: ProblemTagType) {
+        return document.add(domainId, content, 1, document.TYPE_PROBLEM_TAG, null, null, null, { type });
+    }
+
+    static async updateTag(domainId: string, _id: string, $set: Partial<ProblemTag>) {
+        return document.set(domainId, document.TYPE_PROBLEM_TAG, _id, $set);
+    }
+
+    static async deleteTag(domainId: string, _id: string) {
+        const res = await Promise.all([
+            await document.deleteFromSet(domainId, document.TYPE_PROBLEM, null, 'tag', _id),
+            await document.deleteOne(domainId, document.TYPE_PROBLEM_TAG, _id),
+        ]);
+
+        return !!res[1][0].deletedCount;
     }
 }
 

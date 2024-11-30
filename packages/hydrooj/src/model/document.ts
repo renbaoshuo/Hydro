@@ -7,7 +7,7 @@ import { Context } from '../context';
 import {
     Content, ContestClarificationDoc, DiscussionDoc,
     DiscussionReplyDoc, ProblemDoc, ProblemStatusDoc,
-    Tdoc, TrainingDoc,
+    ProblemTag, Tdoc, TrainingDoc,
 } from '../interface';
 import * as bus from '../service/bus';
 import db from '../service/db';
@@ -23,6 +23,7 @@ export const collStatus = db.collection('document.status');
 export const TYPE_PROBLEM: 10 = 10;
 export const TYPE_PROBLEM_SOLUTION: 11 = 11;
 export const TYPE_PROBLEM_LIST: 12 = 12;
+export const TYPE_PROBLEM_TAG: 13 = 13;
 export const TYPE_DISCUSSION_NODE: 20 = 20;
 export const TYPE_DISCUSSION: 21 = 21;
 export const TYPE_DISCUSSION_REPLY: 22 = 22;
@@ -36,6 +37,7 @@ export interface DocType {
     [TYPE_PROBLEM]: ProblemDoc;
     [TYPE_PROBLEM_SOLUTION]: any;
     [TYPE_PROBLEM_LIST]: any;
+    [TYPE_PROBLEM_TAG]: ProblemTag;
     [TYPE_DISCUSSION_NODE]: any;
     [TYPE_DISCUSSION]: DiscussionDoc;
     [TYPE_DISCUSSION_REPLY]: DiscussionReplyDoc;
@@ -229,6 +231,19 @@ export async function deleteSub<T extends keyof DocType, K extends ArrayKeys<Doc
         { domainId, docType, docId },
         // @ts-ignore
         { $pull: { [key]: { _id: { $in: subId } } } },
+        { returnDocument: 'after' },
+    );
+    return res.value;
+}
+
+export async function deleteFromSet<T extends keyof DocType, K extends ArrayKeys<DocType[T], string>>(
+    domainId: string, docType: T, docId: DocType[T]['docId'],
+    setKey: K, content: string,
+) {
+    const res = await coll.findOneAndUpdate(
+        { domainId, docType, docId },
+        // @ts-ignore
+        { $pull: { [setKey]: content } },
         { returnDocument: 'after' },
     );
     return res.value;

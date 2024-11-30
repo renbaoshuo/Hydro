@@ -17,7 +17,7 @@ import {
     ProblemNotFoundError, RecordNotFoundError, SolutionNotFoundError, ValidationError,
 } from '../error';
 import {
-    ProblemDoc, ProblemSearchOptions, ProblemStatusDoc, RecordDoc, User,
+    ProblemDoc, ProblemSearchOptions, ProblemStatusDoc, ProblemTagType, RecordDoc, User,
 } from '../interface';
 import { PERM, PRIV, STATUS } from '../model/builtin';
 import * as contest from '../model/contest';
@@ -1019,6 +1019,36 @@ export class ProblemCreateHandler extends Handler {
     }
 }
 
+export class ProblemTagsHandler extends Handler {
+    async get() {
+        this.response.body = {
+            tags: await problem.listTags(this.args.domainId, {}),
+        };
+        this.response.template = 'problem_tags.html';
+    }
+
+    @post('_id', Types.ObjectId, true)
+    @post('content', Types.Content)
+    @post('type', Types.Range(Object.values(ProblemTagType)))
+    @post('deleteTag', Types.Boolean, true)
+    async post(domainId: string, _id: string, content: string, type: ProblemTagType, deleteTag = false) {
+        if (!_id) {
+            const _id = await problem.createTag(domainId, content, type);
+            console.log(_id);
+        } else if (deleteTag) {
+            await problem.deleteTag(domainId, _id);
+        } else {
+            await problem.updateTag(domainId, _id, {
+                content,
+                type,
+            });
+        }
+
+        this.response.template = 'problem_tags.html';
+        this.back();
+    }
+}
+
 export async function apply(ctx: Context) {
     ctx.Route('problem_main', '/p', ProblemMainHandler, PERM.PERM_VIEW_PROBLEM);
     ctx.Route('problem_random', '/problem/random', ProblemRandomHandler, PERM.PERM_VIEW_PROBLEM);
@@ -1035,6 +1065,7 @@ export async function apply(ctx: Context) {
     ctx.Route('problem_solution_reply_raw', '/p/:pid/solution/:psid/:psrid/raw', ProblemSolutionRawHandler, PERM.PERM_VIEW_PROBLEM);
     ctx.Route('problem_statistics', '/p/:pid/stat', ProblemStatisticsHandler, PERM.PERM_VIEW_PROBLEM);
     ctx.Route('problem_create', '/problem/create', ProblemCreateHandler, PERM.PERM_CREATE_PROBLEM);
+    ctx.Route('problem_tags', '/problem/tags', ProblemTagsHandler, PERM.PERM_EDIT_PROBLEM);
     ctx.inject(['api'], ({ api }) => {
         api.value('FileInfo', [
             ['_id', 'String!'],
