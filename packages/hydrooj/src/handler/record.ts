@@ -374,9 +374,11 @@ class RecordDetailConnectionHandler extends ConnectionHandler {
     disconnectTimeout: NodeJS.Timeout;
     throttleSend: any;
     applyProjection = false;
+    noTemplate = false;
 
     @param('rid', Types.ObjectId)
-    async prepare(domainId: string, rid: ObjectId) {
+    @param('noTemplate', Types.Boolean, true)
+    async prepare(domainId: string, rid: ObjectId, noTemplate?: boolean) {
         const rdoc = await record.get(domainId, rid);
         if (!rdoc) return;
         if (rdoc.contest && ![record.RECORD_GENERATE, record.RECORD_PRETEST].some((i) => i.toHexString() === rdoc.contest.toHexString())) {
@@ -408,12 +410,18 @@ class RecordDetailConnectionHandler extends ConnectionHandler {
         }
 
         this.pdoc = pdoc;
+        this.noTemplate = noTemplate ?? false;
         this.throttleSend = throttle(this.sendUpdate, 1000, { trailing: true });
         this.rid = rid.toString();
         this.onRecordChange(rdoc);
     }
 
     async sendUpdate(rdoc: RecordDoc) {
+        if (this.noTemplate) {
+            this.send({ rdoc });
+            return;
+        }
+
         this.send({
             status: rdoc.status,
             status_html: await this.renderHTML('record_detail_status.html', { rdoc, pdoc: this.pdoc }),
