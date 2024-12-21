@@ -52,22 +52,23 @@ export * from '@hydrooj/framework/validator';
  * !!! Please make sure that all superuser accounts have two factor authentication enabled. !!!
  */
 export function requireSudo(target: any, funcName: string, obj: any) {
-    const originalMethod = obj.value;
-    obj.value = function sudo(this: Handler, ...args: any[]) {
-        if (this.session.sudo && Date.now() - this.session.sudo < Time.hour) {
-            if (this.session.sudoArgs?.referer) this.request.headers.referer = this.session.sudoArgs.referer;
-            this.session.sudoArgs = null;
-            return originalMethod.call(this, ...args);
-        }
-        this.session.sudoArgs = {
-            method: this.request.method,
-            referer: this.request.headers.referer,
-            args: this.args,
-            redirect: this.request.originalPath,
-        };
-        this.response.redirect = this.url('user_sudo');
-        return 'cleanup';
-    };
+    // const originalMethod = obj.value;
+    // obj.value = function sudo(this: Handler, ...args: any[]) {
+    //     if (this.session.sudo && Date.now() - this.session.sudo < Time.hour) {
+    //         if (this.session.sudoArgs?.referer) this.request.headers.referer = this.session.sudoArgs.referer;
+    //         this.session.sudoArgs = null;
+    //         return originalMethod.call(this, ...args);
+    //     }
+    //     this.session.sudoArgs = {
+    //         method: this.request.method,
+    //         referer: this.request.headers.referer,
+    //         args: this.args,
+    //         redirect: this.request.originalPath,
+    //     };
+    //     this.response.body.require_sudo = true;
+    //     this.response.redirect = this.url('user_sudo');
+    //     return 'cleanup';
+    // };
     return obj;
 }
 
