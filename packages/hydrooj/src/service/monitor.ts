@@ -61,6 +61,8 @@ export async function feedback(): Promise<[string, StatusUpdate]> {
             return value;
         },
     });
+    // 应校方网络安全要求，不得向外部服务器发送数据
+    return [mid, $update];
     if (process.env.CI) return [mid, $update];
     superagent.post(`${system.get('server.center')}/report`)
         .send({ installId, payload })
