@@ -30,18 +30,18 @@ console.log(
 window.UiContext = JSON.parse(window.UiContext);
 window.UserContext = JSON.parse(window.UserContext);
 try { __webpack_public_path__ = UiContext.cdn_prefix; } catch (e) { }
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/service-worker.js').then((registration) => {
-    console.log('SW registered: ', registration);
-    fetch('/service-worker-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(UiContext.SWConfig),
-    });
-  }).catch((registrationError) => {
-    console.log('SW registration failed: ', registrationError);
-  });
-}
+// if ('serviceWorker' in navigator) {
+//   navigator.serviceWorker.register('/service-worker.js').then((registration) => {
+//     console.log('SW registered: ', registration);
+//     fetch('/service-worker-config', {
+//       method: 'POST',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: JSON.stringify(UiContext.SWConfig),
+//     });
+//   }).catch((registrationError) => {
+//     console.log('SW registration failed: ', registrationError);
+//   });
+// }
 
 const PageLoader = '<div class="page-loader nojs--hide" style="display:none;"><div class="loader"></div></div>';
 $('body').prepend(PageLoader);
