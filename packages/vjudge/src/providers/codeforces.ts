@@ -23,7 +23,7 @@ function parseProblemId(id: string) {
 
 export function getDifficulty(tags: string[]) {
     const d = tags.find((i) => /^\*\d+$/.test(i))?.split('*')[1];
-    if (!(d && +d)) return null;
+    if (!Number.isSafeInteger(+d)) return null;
     const map = [
         [500, 1],
         [800, 2],
@@ -318,7 +318,6 @@ export default class CodeforcesProvider extends BasicFetcher implements IBasicPr
     async waitForSubmission(id: string, next, end) {
         let i = 1;
         const start = Date.now();
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             await sleep(3000);
             const contestId = id.includes('#') ? id.split('#')[0] : null;

@@ -1,6 +1,5 @@
 import AdmZip from 'adm-zip';
 import { stringify as toCSV } from 'csv-stringify/sync';
-import { statSync } from 'fs-extra';
 import { pick } from 'lodash';
 import moment from 'moment-timezone';
 import { ObjectId } from 'mongodb';
@@ -325,7 +324,6 @@ export class ContestEditHandler extends Handler {
         await ScheduleModel.deleteMany(task);
         const operation = [];
         if (Date.now() <= endAt.getTime() && autoHide) {
-            // eslint-disable-next-line no-await-in-loop
             await Promise.all(pids.map((pid) => problem.edit(domainId, pid, { hidden: true })));
             operation.push('unhide');
         }
@@ -476,8 +474,7 @@ export class ContestManagementHandler extends ContestManagementBaseHandler {
         }
         const file = this.request.files?.file;
         if (!file) throw new ValidationError('file');
-        const f = statSync(file.filepath);
-        const size = Math.sum((this.tdoc.files || []).map((i) => i.size)) + f.size;
+        const size = Math.sum((this.tdoc.files || []).map((i) => i.size)) + file.size;
         if (size >= system.get('limit.contest_files_size')) {
             throw new FileLimitExceededError('size');
         }
@@ -677,8 +674,7 @@ export class ContestScoreboardHandler extends ContestDetailBaseHandler {
 class ScoreboardService extends Service {
     views: Record<string, ScoreboardView<any>> = {};
     constructor(ctx: Context) {
-        super(ctx, 'scoreboard', true);
-        ctx.set('scoreboard', this);
+        super(ctx, 'scoreboard');
     }
 
     addView<T extends { [key: string]: keyof BuiltinInput | AnyFunction | Type<any> }>(

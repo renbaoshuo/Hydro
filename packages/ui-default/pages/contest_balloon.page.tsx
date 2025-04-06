@@ -1,4 +1,4 @@
-import $ from 'jquery';
+/* eslint-disable react-refresh/only-export-components */
 import yaml from 'js-yaml';
 import React from 'react';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
@@ -65,11 +65,8 @@ function Balloon({ tdoc, val }) {
 }
 
 async function handleSetColor(tdoc) {
-  let val = tdoc.balloon;
-  if (!val) {
-    val = {};
-    for (const pid of tdoc.pids) val[+pid] = { color: '#ffffff', name: '' };
-  }
+  const val = tdoc.balloon || {};
+  for (const pid of tdoc.pids) val[+pid] ||= { color: '#ffffff', name: '' };
   Notification.info(i18n('Loading...'));
   const action = await new ActionDialog({
     $body: tpl(<>

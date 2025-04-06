@@ -6,7 +6,7 @@ import { sleep } from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
 import { EventDoc, Task } from '../interface';
 import { Logger } from '../logger';
-import * as bus from '../service/bus';
+import bus from '../service/bus';
 import db from '../service/db';
 
 const logger = new Logger('model/task');
@@ -19,9 +19,9 @@ async function getFirst(query: Filter<Task>) {
     try {
         const q = { ...query };
         const res = await coll.findOneAndDelete(q, { sort: { priority: -1 } });
-        if (res.value) {
-            logger.debug('%o', res.value);
-            return res.value;
+        if (res) {
+            logger.debug('%o', res);
+            return res;
         }
         return null;
     } catch (e) {
@@ -144,12 +144,13 @@ const id = process.env.exec_mode === 'cluster_mode' ? hostname() : nanoid();
 
 export async function apply(ctx: Context) {
     ctx.on('domain/delete', (domainId) => coll.deleteMany({ domainId }));
-    ctx.on('bus/broadcast', (event, payload) => {
+    ctx.on('bus/broadcast', (event, payload, trace) => {
         collEvent.insertOne({
             ack: [id],
             event,
             payload: BSON.EJSON.stringify(payload),
             expire: new Date(Date.now() + 10000),
+            trace,
         });
     });
 
@@ -168,7 +169,6 @@ export async function apply(ctx: Context) {
     stream.on('error', async () => {
         // The $changeStream stage is only supported on replica sets
         logger.info('No replica set found.');
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             let res;
             try {
@@ -181,9 +181,9 @@ export async function apply(ctx: Context) {
                 logger.error(e);
                 continue;
             }
-            if (argv.options.showEvent) logger.info('Event: %o', res.value);
+            if (argv.options.showEvent) logger.info('Event: %o', res);
             // eslint-disable-next-line no-await-in-loop
-            await (res.value ? handleEvent(res.value) : sleep(500));
+            await (res ? handleEvent(res) : sleep(500));
         }
     });
     await db.ensureIndexes(collEvent, { name: 'expire', key: { expire: 1 }, expireAfterSeconds: 0 });

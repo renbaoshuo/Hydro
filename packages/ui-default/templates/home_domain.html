@@ -32,17 +32,24 @@
           <td class="col--icon">
             <img src="{{ avatarUrl(ddoc.avatar, 32) }}" width="32" height="32">
           </td>
-              {% set _show = handler.user.pinnedDomains.includes(ddoc._id) %}
-          <td class="col--name" data-star-action="?id={{ ddoc['_id'] }}" data-star="{{ _show }}">
+          {% set _star = handler.user.pinnedDomains.includes(ddoc._id) %}
+          <td class="col--name" data-star-action="?id={{ ddoc['_id'] }}" data-star="{{ _star }}">
             {{ ddoc['name'] }} ({{ ddoc['_id'] }})
           </td>
           <td class="col--role">
-            {{ dudict[ddoc._id].role|default('default') }}
+            {{ role[ddoc._id]|default('default') }}
           </td>
           <td class="col--action">
             <a class="typo-a" href="{{ url('homepage', domainId=ddoc['_id']) }}">{{ _('Visit') }}</a>
           {% if canManage[ddoc['_id']] %}
             · <a class="typo-a" href="{{ url('domain_dashboard', domainId=ddoc['_id']) }}">{{ _('Manage') }}</a>
+          {% endif %}
+          {% if ddoc['_id'] != 'system' and ddoc['owner'] != handler.user._id %}
+            · <form class="form--inline" method="post">
+              <input type="hidden" name="operation" value="leave">
+              <input type="hidden" name="id" value="{{ ddoc['_id'] }}">
+              <button class="typo-a" type="submit">{{ _('Leave') }}</button>
+            </form>
           {% endif %}
           </td>
         </tr>

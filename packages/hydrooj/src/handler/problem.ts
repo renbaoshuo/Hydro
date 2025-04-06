@@ -1,5 +1,5 @@
 import AdmZip from 'adm-zip';
-import { readFile, statSync } from 'fs-extra';
+import { readFile } from 'fs-extra';
 import {
     escapeRegExp, flattenDeep, intersection, pick,
 } from 'lodash';
@@ -11,7 +11,7 @@ import { sortFiles, streamToBuffer } from '@hydrooj/utils/lib/utils';
 import type { Context } from '../context';
 import {
     BadRequestError, ContestNotAttendedError, ContestNotEndedError, ContestNotFoundError, ContestNotLiveError,
-    FileLimitExceededError, HackFailedError, NoProblemError, NotFoundError,
+    FileLimitExceededError, FileTooLargeError, HackFailedError, NoProblemError, NotFoundError,
     PermissionError, ProblemAlreadyExistError, ProblemAlreadyUsedByContestError, ProblemConfigError,
     ProblemIsReferencedError, ProblemNotAllowCopyError, ProblemNotAllowLanguageError, ProblemNotAllowPretestError,
     ProblemNotFoundError, RecordNotFoundError, SolutionNotFoundError, ValidationError,
@@ -109,7 +109,7 @@ export class ProblemMainHandler extends Handler {
         // eslint-disable-next-line @typescript-eslint/no-shadow
         const query = this.queryContext.query;
         const psdict = {};
-        const search = global.Hydro.lib.problemSearch || defaultSearch;
+        const search = Object.values(global.Hydro.module.problemSearch)[0] || defaultSearch;
         const parsed = parser.parse(q, {
             keywords: ['category', 'difficulty', 'namespace'],
             offsets: false,
@@ -142,7 +142,6 @@ export class ProblemMainHandler extends Handler {
         }
         const sort = this.queryContext.sort;
         await this.ctx.parallel('problem/list', query, this, sort);
-        // eslint-disable-next-line prefer-const
         let [pdocs, ppcount, pcount] = this.queryContext.fail
             ? [[], 0, 0]
             : await this.paginate(
@@ -157,14 +156,10 @@ export class ProblemMainHandler extends Handler {
         if (sort.length) pdocs = pdocs.sort((a, b) => sort.indexOf(`${a.domainId}/${a.docId}`) - sort.indexOf(`${b.domainId}/${b.docId}`));
         if (text && pcount > pdocs.length) pcount = pdocs.length;
         if (this.user.hasPriv(PRIV.PRIV_USER_PROFILE)) {
-            const domainIds = Array.from(new Set(pdocs.map((i) => i.domainId)));
-            await Promise.all(
-                domainIds.map((did) =>
-                    problem.getListStatus(
-                        did, this.user._id,
-                        pdocs.filter((i) => i.domainId === did).map((i) => i.docId),
-                    ).then((res) => Object.assign(psdict, res))),
-            );
+            Object.assign(psdict, await problem.getListStatus(
+                domainId, this.user._id,
+                pdocs.map((i) => i.docId),
+            ));
         }
         if (pjax) {
             this.response.body = {
@@ -302,18 +297,20 @@ export class ProblemDetailHandler extends ContestDetailBaseHandler {
         }
         if (typeof this.pdoc.config !== 'string') {
             let baseLangs;
+            const t = [];
+            if (this.pdoc.config.langs) t.push(this.pdoc.config.langs);
+            if (ddoc.langs) t.push(ddoc.langs.split(',').map((i) => i.trim()).filter((i) => i));
+            if (this.domain.langs) t.push(this.domain.langs.split(',').map((i) => i.trim()).filter((i) => i));
             if (this.pdoc.config.type === 'remote_judge') {
                 const p = this.pdoc.config.subType;
                 const dl = Object.keys(setting.langs).filter((i) => i.startsWith(`${p}.`) || setting.langs[i].validAs[p]);
                 if (setting.langs[p]) dl.push(p);
                 baseLangs = dl;
             } else {
-                baseLangs = Object.keys(setting.langs).filter((i) => !setting.langs[i].remote);
+                const needHiddenLangs = flattenDeep(t).length;
+                baseLangs = Object.keys(setting.langs).filter((i) =>
+                    (needHiddenLangs ? !setting.langs[i].remote : !setting.langs[i].remote && !setting.langs[i].hidden));
             }
-            const t = [];
-            if (this.pdoc.config.langs) t.push(this.pdoc.config.langs);
-            if (ddoc.langs) t.push(ddoc.langs.split(',').map((i) => i.trim()).filter((i) => i));
-            if (this.domain.langs) t.push(this.domain.langs.split(',').map((i) => i.trim()).filter((i) => i));
             this.pdoc.config.langs = ['objective', 'submit_answer'].includes(this.pdoc.config.type) ? ['_'] : intersection(baseLangs, ...t);
         }
         await this.ctx.parallel('problem/get', this.pdoc, this);
@@ -394,19 +391,21 @@ export class ProblemDetailHandler extends ContestDetailBaseHandler {
     @param('pid', Types.UnsignedInt)
     async postRejudge(domainId: string, pid: number) {
         this.checkPerm(PERM.PERM_REJUDGE_PROBLEM);
+        if (!this.pdoc.config || typeof this.pdoc.config === 'string') throw new ProblemConfigError();
         const rdocs = await record.getMulti(domainId, {
             pid,
             contest: { $nin: [record.RECORD_GENERATE, record.RECORD_PRETEST] },
             status: { $ne: STATUS.STATUS_CANCELED },
             'files.hack': { $exists: false },
         }).project({ _id: 1, contest: 1 }).toArray();
-        if (!this.pdoc.config || typeof this.pdoc.config === 'string') throw new ProblemConfigError();
-        const priority = await record.submissionPriority(this.user._id, -10000 - rdocs.length * 5 - 50);
-        await record.reset(domainId, rdocs.map((rdoc) => rdoc._id), true);
-        await Promise.all([
-            record.judge(domainId, rdocs.filter((i) => i.contest).map((i) => i._id), priority, { detail: false }, { rejudge: true }),
-            record.judge(domainId, rdocs.filter((i) => !i.contest).map((i) => i._id), priority, {}, { rejudge: true }),
-        ]);
+        if (rdocs.length) {
+            const priority = await record.submissionPriority(this.user._id, -10000 - rdocs.length * 5 - 50);
+            await record.reset(domainId, rdocs.map((rdoc) => rdoc._id), true);
+            await Promise.all([
+                record.judge(domainId, rdocs.filter((i) => i.contest).map((i) => i._id), priority, { detail: false }, { rejudge: true }),
+                record.judge(domainId, rdocs.filter((i) => !i.contest).map((i) => i._id), priority, {}, { rejudge: true }),
+            ]);
+        }
         this.back();
     }
 
@@ -495,16 +494,14 @@ export class ProblemSubmitHandler extends ProblemDetailHandler {
             const file = this.request.files?.file;
             if (!file || file.size === 0) throw new ValidationError('code');
             const sizeLimit = config.type === 'submit_answer' ? 128 * 1024 * 1024 : lengthLimit;
-            if (file.size > sizeLimit) throw new ValidationError('file');
-            const showReadFile = () => {
+            if (file.size > sizeLimit) throw new FileTooLargeError('file');
+            const shouldReadFile = () => {
                 if (config.type === 'objective') return true;
-                if (lang === '_') return true;
+                if (lang === '_') return false;
                 return file.size < lengthLimit && !file.filepath.endsWith('.zip') && !setting.langs[lang].isBinary;
             };
-            if (showReadFile()) {
-                // TODO submission file shape
-                code = await readFile(file.filepath, 'utf-8');
-            } else {
+            if (shouldReadFile()) code = await readFile(file.filepath, 'utf-8');
+            else {
                 const id = nanoid();
                 await storage.put(`submission/${this.user._id}/${id}`, file.filepath, this.user._id);
                 files.code = `${this.user._id}/${id}#${file.originalFilename}`;
@@ -707,13 +704,14 @@ export class ProblemFilesHandler extends ProblemDetailHandler {
     @post('filename', Types.Filename, true)
     @post('type', Types.Range(['testdata', 'additional_file']), true)
     async postUploadFile(domainId: string, filename: string, type = 'testdata') {
-        if (!this.request.files.file) throw new ValidationError('file');
-        filename ||= this.request.files.file.originalFilename || String.random(16);
+        const file = this.request.files.file;
+        if (!file) throw new ValidationError('file');
+        filename ||= file.originalFilename || String.random(16);
         const files = [];
         if (filename.endsWith('.zip') && type === 'testdata') {
             let zip: AdmZip;
             try {
-                zip = new AdmZip(this.request.files.file.filepath);
+                zip = new AdmZip(file.filepath);
             } catch (e) {
                 throw new ValidationError('zip', null, e.message);
             }
@@ -731,8 +729,8 @@ export class ProblemFilesHandler extends ProblemDetailHandler {
             files.push({
                 type,
                 name: filename,
-                size: statSync(this.request.files.file.filepath).size,
-                data: () => this.request.files.file.filepath,
+                size: file.size,
+                data: () => file.filepath,
             });
         }
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM)) {
@@ -897,9 +895,8 @@ export class ProblemSolutionHandler extends ProblemDetailHandler {
     @param('content', Types.Content)
     async postEditReply(domainId: string, psid: ObjectId, psrid: ObjectId, content: string) {
         const [psdoc, psrdoc] = await solution.getReply(domainId, psid, psrid);
-        if ((!psdoc) || psdoc.parentId !== this.pdoc.docId) throw new SolutionNotFoundError(domainId, psid);
-        if (!(this.user.own(psrdoc)
-            && this.user.hasPerm(PERM.PERM_EDIT_PROBLEM_SOLUTION_REPLY_SELF))) {
+        if (!psdoc || psdoc.parentId !== this.pdoc.docId) throw new SolutionNotFoundError(domainId, psid);
+        if (!this.user.own(psrdoc) || !this.user.hasPerm(PERM.PERM_EDIT_PROBLEM_SOLUTION_REPLY_SELF)) {
             throw new PermissionError(PERM.PERM_EDIT_PROBLEM_SOLUTION_REPLY_SELF);
         }
         await solution.editReply(domainId, psid, psrid, content);
@@ -910,9 +907,8 @@ export class ProblemSolutionHandler extends ProblemDetailHandler {
     @param('psrid', Types.ObjectId)
     async postDeleteReply(domainId: string, psid: ObjectId, psrid: ObjectId) {
         const [psdoc, psrdoc] = await solution.getReply(domainId, psid, psrid);
-        if ((!psdoc) || psdoc.parentId !== this.pdoc.docId) throw new SolutionNotFoundError(psid);
-        if (!(this.user.own(psrdoc)
-            && this.user.hasPerm(PERM.PERM_DELETE_PROBLEM_SOLUTION_REPLY_SELF))) {
+        if (!psdoc || psdoc.parentId !== this.pdoc.docId) throw new SolutionNotFoundError(psid);
+        if (!this.user.own(psrdoc) || !this.user.hasPerm(PERM.PERM_DELETE_PROBLEM_SOLUTION_REPLY_SELF)) {
             this.checkPerm(PERM.PERM_DELETE_PROBLEM_SOLUTION_REPLY);
         }
         await solution.delReply(domainId, psid, psrid);

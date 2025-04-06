@@ -242,9 +242,8 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
     function ProblemNavigation() {
       [, setUpdate] = React.useState(0);
       return <div className="contest-problems" style={{ margin: '1em' }}>
-        {pids.map((i) => <a href={`#p${i}`} className={ans[i] ? 'pass ' : ''}>
+        {pids.map((i) => <a href={`#p${i}`} key={i} className={ans[i] ? 'pending ' : ''}>
           <span className="id">{i}</span>
-          {ans[i] && <span className="icon icon-check"></span>}
         </a>)}
       </div>;
     }
@@ -318,7 +317,7 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
       </li>));
       $(document).on('click', '#clearAnswers', async () => {
         const result = await new ConfirmDialog({
-          $body: tpl.typoMsg('All changes will be lost. Are you sure to clear all answers?'),
+          $body: tpl.typoMsg(i18n('All changes will be lost. Are you sure to clear all answers?')),
         }).open();
         if (result === 'yes') await clearAns();
       });
@@ -329,6 +328,8 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
     $('.non-scratchpad--hide').hide();
     $('.scratchpad--hide').hide();
     $('.outer-loader-container').hide();
+    $(document).on('click', () => { setUpdate?.((v) => v + 1); });
+    $(document).on('input', () => { setUpdate?.((v) => v + 1); });
   }
 
   $(document).on('click', '[name="problem-sidebar__open-scratchpad"]', (ev) => {

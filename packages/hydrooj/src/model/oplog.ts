@@ -1,7 +1,7 @@
 import { cloneDeep } from 'lodash';
 import { ObjectId } from 'mongodb';
 import { OplogDoc } from '../interface';
-import * as bus from '../service/bus';
+import bus from '../service/bus';
 import db from '../service/db';
 import type { Handler } from '../service/server';
 
@@ -52,6 +52,7 @@ export async function log<T extends Handler>(handler: T, type: string, data: any
         args,
         operator: handler.user?._id,
         operateIp: handler.request.ip,
+        json: handler.request.json,
     });
     return res.insertedId;
 }

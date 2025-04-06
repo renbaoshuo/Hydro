@@ -1,12 +1,13 @@
 import path from 'path';
 import { generateRegistrationOptions, verifyRegistrationResponse } from '@simplewebauthn/server';
+import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
 import yaml from 'js-yaml';
 import { pick } from 'lodash';
 import { Binary, ObjectId } from 'mongodb';
-import Parser from 'ua-parser-js';
+import { UAParser } from 'ua-parser-js';
 import { Context } from '../context';
 import {
-    AuthOperationError, BlacklistedError, DomainAlreadyExistsError, InvalidTokenError,
+    AuthOperationError, BadRequestError, BlacklistedError, DomainAlreadyExistsError, InvalidTokenError,
     NotFoundError, PermissionError, UserAlreadyExistError,
     UserNotFoundError, ValidationError, VerifyPasswordError,
 } from '../error';
@@ -186,15 +187,13 @@ class HomeSecurityHandler extends Handler {
             session.isCurrent = session._id === this.session._id;
             session._id = md5(session._id);
             const ua = session.updateUa || session.createUa;
-            if (ua) {
-                const parser = new Parser(ua);
-                session.updateUaInfo = parser.getResult();
-            }
+            if (ua) session.updateUaInfo = UAParser(ua);
             session.updateGeoip = this.ctx.geoip?.lookup?.(
                 session.updateIp || session.createIp,
                 this.translate('geoip_locale'),
             );
         }
+        const relations = await this.ctx.oauth.list(this.user._id);
         this.response.template = 'home_security.html';
         this.response.body = {
             sudoUid: this.session.sudoUid || null,
@@ -203,7 +202,8 @@ class HomeSecurityHandler extends Handler {
                 'credentialID', 'name', 'credentialType', 'credentialDeviceType',
                 'authenticatorAttachment', 'regat', 'fmt',
             ])),
-            geoipProvider: this.ctx?.geoip?.provider,
+            geoipProvider: this.ctx.geoip?.provider,
+            relations,
         };
     }
 
@@ -248,12 +248,19 @@ class HomeSecurityHandler extends Handler {
             uname: this.user.uname,
             url_prefix: prefix.endsWith('/') ? prefix.slice(0, -1) : prefix,
         });
-        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m);
+        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m.toString());
         this.response.template = 'user_changemail_mail_sent.html';
     }
 
+    @param('platform', Types.String)
+    async postLinkAccount({ }, platform: string) {
+        if (!this.ctx.oauth.providers[platform]) throw new ValidationError('platform');
+        this.session.oauthBind = platform;
+        await this.ctx.oauth.providers[platform].get.call(this);
+    }
+
     @param('tokenDigest', Types.String)
-    async postDeleteToken(domainId: string, tokenDigest: string) {
+    async postDeleteToken({ }, tokenDigest: string) {
         const sessions = await token.getSessionListByUid(this.user._id);
         for (const session of sessions) {
             if (tokenDigest === md5(session._id)) {
@@ -273,7 +280,7 @@ class HomeSecurityHandler extends Handler {
     @requireSudo
     @param('code', Types.String)
     @param('secret', Types.String)
-    async postEnableTfa(domainId: string, code: string, secret: string) {
+    async postEnableTfa({ }, code: string, secret: string) {
         if (this.user._tfa) throw new AuthOperationError('2FA', 'enabled');
         if (!verifyTFA(secret, code)) throw new InvalidTokenError('2FA');
         await user.setById(this.user._id, { tfa: secret });
@@ -287,16 +294,16 @@ class HomeSecurityHandler extends Handler {
 
     @requireSudo
     @param('type', Types.Range(['cross-platform', 'platform']))
-    async postRegister(domainId: string, type: 'cross-platform' | 'platform') {
+    async postRegister({ }, type: 'cross-platform' | 'platform') {
         const options = await generateRegistrationOptions({
             rpName: system.get('server.name'),
             rpID: this.getAuthnHost(),
-            userID: this.user._id.toString(),
+            userID: isoUint8Array.fromUTF8String(this.user._id.toString()),
             userDisplayName: this.user.uname,
             userName: `${this.user.uname}(${this.user.mail})`,
             attestationType: 'direct',
             excludeCredentials: this.user._authenticators.map((c) => ({
-                id: c.credentialID.buffer,
+                id: isoBase64URL.fromBuffer(c.credentialID.buffer),
                 type: 'public-key',
             })),
             authenticatorSelection: {
@@ -309,7 +316,7 @@ class HomeSecurityHandler extends Handler {
 
     @requireSudo
     @param('name', Types.String)
-    async postEnableAuthn(domainId: string, name: string) {
+    async postEnableAuthn({ }, name: string) {
         if (!this.session.webauthnVerify) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_WEBAUTHN]);
         const verification = await verifyRegistrationResponse({
             response: this.args.result,
@@ -319,12 +326,13 @@ class HomeSecurityHandler extends Handler {
         }).catch(() => { throw new ValidationError('verify'); });
         if (!verification.verified) throw new ValidationError('verify');
         const info = verification.registrationInfo;
-        const id = Buffer.from(info.credentialID);
+        const id = isoBase64URL.toBuffer(info.credential.id);
         if (this.user._authenticators.find((c) => c.credentialID.buffer.toString() === id.toString())) throw new ValidationError('authenticator');
         this.user._authenticators.push({
             ...info,
+            counter: info.credential.counter,
             credentialID: new Binary(id),
-            credentialPublicKey: new Binary(Buffer.from(info.credentialPublicKey)),
+            credentialPublicKey: new Binary(Buffer.from(info.credential.publicKey)),
             attestationObject: new Binary(Buffer.from(info.attestationObject)),
             name,
             regat: Date.now(),
@@ -336,7 +344,7 @@ class HomeSecurityHandler extends Handler {
 
     @requireSudo
     @param('id', Types.String)
-    async postDisableAuthn(domainId: string, id: string) {
+    async postDisableAuthn({ }, id: string) {
         const authenticators = this.user._authenticators?.filter((c) => Buffer.from(c.credentialID.buffer).toString('base64') !== id);
         if (this.user._authenticators?.length === authenticators?.length) throw new ValidationError('authenticator');
         await user.setById(this.user._id, { authenticators });
@@ -395,7 +403,7 @@ function set(s: Setting, key: string, value: any) {
 
 class HomeSettingsHandler extends Handler {
     @param('category', Types.Range(['preference', 'account', 'domain']))
-    async get(domainId: string, category: string) {
+    async get({ }, category: string) {
         this.response.template = 'home_settings.html';
         this.response.body = {
             category,
@@ -432,7 +440,7 @@ class HomeSettingsHandler extends Handler {
 
 class HomeAvatarHandler extends Handler {
     @param('avatar', Types.String, true)
-    async post(domainId: string, input: string) {
+    async post({ }, input: string) {
         if (input) {
             if (!validate(input)) throw new ValidationError('avatar');
             await user.setById(this.user._id, { avatar: input });
@@ -468,36 +476,33 @@ class UserChangemailWithCodeHandler extends Handler {
 
 class HomeDomainHandler extends Handler {
     @query('all', Types.Boolean)
-    async get(domainId: string, all: boolean) {
-        let res: DomainDoc[] = [];
-        let dudict: Record<string, any> = {};
+    async get({ }, all: boolean) {
+        let ddocs: DomainDoc[] = [];
+        const role: Record<string, string> = {};
         if (!all) {
-            dudict = await domain.getDictUserByDomainId(this.user._id);
+            const dudict = await domain.getDictUserByDomainId(this.user._id);
             const dids = Object.keys(dudict);
-            res = await domain.getMulti({ _id: { $in: dids } }).toArray();
+            ddocs = await domain.getMulti({ _id: { $in: dids } }).toArray();
         } else {
             this.checkPriv(PRIV.PRIV_VIEW_ALL_DOMAIN);
-            res = await domain.getMulti().toArray();
-            await Promise.all(res.map(async (ddoc) => {
-                dudict[ddoc._id] = await user.getById(domainId, this.user._id);
-            }));
+            ddocs = await domain.getMulti().toArray();
         }
         const canManage = {};
-        const ddocs = [];
-        for (const ddoc of res) {
-            // eslint-disable-next-line no-await-in-loop
-            const udoc = (await user.getById(ddoc._id, this.user._id))!;
-            const dudoc = dudict[ddoc._id];
-            if (['default', 'guest'].includes(dudoc.role)) {
-                delete dudict[ddoc._id];
-                continue;
+        if (this.user.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN)) {
+            for (const ddoc of ddocs) {
+                canManage[ddoc._id] = true;
+                role[ddoc._id] = 'root';
             }
-            ddocs.push(ddoc);
-            canManage[ddoc._id] = udoc.hasPerm(PERM.PERM_EDIT_DOMAIN)
-                || udoc.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN);
+        } else {
+            for (const ddoc of ddocs) {
+                // eslint-disable-next-line no-await-in-loop
+                const udoc = await user.getById(ddoc._id, this.user._id);
+                canManage[ddoc._id] = udoc.hasPerm(PERM.PERM_EDIT_DOMAIN);
+                role[ddoc._id] = udoc.role;
+            }
         }
         this.response.template = 'home_domain.html';
-        this.response.body = { ddocs, dudict, canManage };
+        this.response.body = { ddocs, canManage, role };
     }
 
     @param('id', Types.String)
@@ -506,6 +511,15 @@ class HomeDomainHandler extends Handler {
         if (star) await user.setById(this.user._id, { pinnedDomains: [...this.user.pinnedDomains, id] });
         else user.setById(this.user._id, { pinnedDomains: this.user.pinnedDomains.filter((i) => i !== id) });
         this.back({ star });
+    }
+
+    @param('id', Types.String)
+    async postLeave({ }, id: string) {
+        if (id === 'system') throw new BadRequestError();
+        const ddoc = await domain.get(id);
+        if (!ddoc) throw new NotFoundError(id);
+        await domain.setJoin(id, this.user._id, false);
+        this.back();
     }
 }
 
@@ -565,7 +579,7 @@ class HomeMessagesHandler extends Handler {
 
     @param('uid', Types.Int)
     @param('content', Types.Content)
-    async postSend(domainId: string, uid: number, content: string) {
+    async postSend({ }, uid: number, content: string) {
         this.checkPriv(PRIV.PRIV_SEND_MESSAGE);
         const udoc = await user.getById('system', uid);
         if (!udoc) throw new UserNotFoundError(uid);
@@ -575,7 +589,7 @@ class HomeMessagesHandler extends Handler {
     }
 
     @param('messageId', Types.ObjectId)
-    async postDeleteMessage(domainId: string, messageId: ObjectId) {
+    async postDeleteMessage({ }, messageId: ObjectId) {
         const msg = await message.get(messageId);
         if ([msg.from, msg.to].includes(this.user._id)) await message.del(messageId);
         else throw new PermissionError();
@@ -583,7 +597,7 @@ class HomeMessagesHandler extends Handler {
     }
 
     @param('messageId', Types.ObjectId)
-    async postRead(domainId: string, messageId: ObjectId) {
+    async postRead({ }, messageId: ObjectId) {
         const msg = await message.get(messageId);
         if ([msg.from, msg.to].includes(this.user._id)) {
             await message.setFlag(messageId, message.FLAG_UNREAD);
@@ -604,7 +618,7 @@ class HomeMessagesConnectionHandler extends ConnectionHandler {
     }
 }
 
-export const inject = { geoip: { required: false } };
+export const inject = { geoip: { required: false }, oauth: {} };
 export function apply(ctx: Context) {
     ctx.Route('homepage', '/', HomeHandler);
     ctx.Route('home_security', '/home/security', HomeSecurityHandler, PRIV.PRIV_USER_PROFILE);

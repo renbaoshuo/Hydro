@@ -111,6 +111,79 @@ Hydro 用户群：1085853538
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
 
+## Hydro 5.0.0-beta.0 / UI 4.58.0-beta.0
+
+- judge: 添加 checker 编译缓存
+- ui: 优化题目详情页面 OGP 信息
+- core&ui: 升级 simplewebauthn
+- register: 添加 tsdown 支持
+- ui&judge: 支持指定 checker 语言
+- core: 基于相对时间计算一血而非绝对时间
+- ui&judge: 添加栈空间回显
+- install: 在树莓派中自动启用 cgroup.memory
+- install: 添加 shm 空间大小警告
+- core: 升级到 cordis@4
+- framework: 支持同时启用多个 renderer
+- core: 分离 HMR 和 Watcher 组件
+- core: i18n: 添加 interface 选项
+- judge: 添加 kattis checker 支持
+- migrate: 修复 hustoj 自动运行
+- core: Settings: 支持使用 Schemastery
+- ui: 更新系统设置页面样式
+- import-qduoj: 修复 spj=null
+- core: 修复文件复制
+- core: 支持存储并显示提交记录重测历史
+- core: 新的加域逻辑
+- ui: UserSelect.Multi: 支持批量粘贴用户名
+- ui: 修复在线 IDE 右键菜单
+- ui: 修复未登录用户查看题目文件页
+- core: oauth: 支持绑定/解绑三方平台账户 (#971)
+- ui: 修复暗色模式表格边框 (#968)
+- core: 优化 icpc 题目包导入 (#966)
+- judge: 弃用 diff (#965)
+- core: 支持设置加域时自动加入小组
+
+### Breaking API Changes
+
+- vjudge: 使用 vjudge.mount 表替代 domain.mount
+- judge: breaking: 不再支持在 checker 等的编译阶段读取选手代码
+- core: 强制要求使用 inject 声明插件依赖
+- core: 移除旧版本 bus 调用
+- core: 移除 global.Hydro.service
+- core: 移除 global.Hydro.ui.template
+- core: 移除 global.Hydro.lib
+- core: 移除 String.prototype.translate (使用 ctx.i18n.translate)
+- core: 升级至 Mongo Driver 6
+- core: 移除 registerResolver, registerValue, registerUnion (使用 ctx.api.resolver/...)
+- core: 移除 paginate, rank (使用 ctx.db.paginate, ctx.db.ranked)
+- core: 移除 setting.yaml
+- core: oauth: 改为使用 ctx.oauth.provide() 注册
+- framework: 移除 ready 与 dispose 事件 (使用 ctx.effect 代替)
+
+## Hydro 4.19.0 / UI 4.57.0
+
+- core&ui&judge: 添加通信题支持
+- core: 优化语言列表筛选
+- ui: builder: 支持 css 引入
+- ui: 优化客观题题目导航样式
+- ui: 在引用题目中添加显示来源按钮
+- core: problem.export: 将 pidFilter 参数标记为可选
+- onsite-toolkit: resolver: 区分打星队伍
+- judge: 文件上传出错时重试
+- framework: 文件自动回收
+- core: DomainEdit: 添加 boolean 设置项支持
+- ui: contest_boolean: 修复默认值
+- ui: 修复排名分页
+- core: RecordConnection: 支持 noTemplate 选项
+
+## Hydro 4.18.2 / UI 4.56.2
+
+- core: 修复提交答案题压缩包提交 (#917)
+- ui: 优化 domain_user 页面性能
+- core: 优化评测任务调度
+- ui: 下载文件失败时自动重试
+- core: Consumer: 从错误中自动恢复
+
 ## Hydro 4.18.0 / UI 4.56.0
 
 - core&ui: ScoreboardView API

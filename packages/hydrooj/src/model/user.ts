@@ -9,7 +9,7 @@ import {
 } from '../interface';
 import avatar from '../lib/avatar';
 import pwhash from '../lib/hash.hydro';
-import * as bus from '../service/bus';
+import bus from '../service/bus';
 import db from '../service/db';
 import { Value } from '../typeutils';
 import { ArgMethod, buildProjection } from '../utils';
@@ -127,18 +127,12 @@ export class User {
             : doc.owner === this._id || (doc.maintainer || []).includes(this._id);
     }
 
-    hasPerm(...perm: bigint[]) {
-        for (const i in perm) {
-            if ((this.perm & this.scope & perm[i]) === perm[i]) return true;
-        }
-        return false;
+    hasPerm(...perms: bigint[]) {
+        return perms.some((perm) => (this.perm & this.scope & perm) === perm);
     }
 
-    hasPriv(...priv: number[]) {
-        for (const i in priv) {
-            if ((this.priv & priv[i]) === priv[i]) return true;
-        }
-        return false;
+    hasPriv(...privs: number[]) {
+        return privs.some((priv) => (this.priv & priv) === priv);
     }
 
     async checkPassword(password: string) {
@@ -215,6 +209,9 @@ class UserModel {
         loginip: '127.0.0.1',
     };
 
+    static _handleMailLower = handleMailLower;
+    static _deleteUserCache = deleteUserCache;
+
     @ArgMethod
     static async getById(domainId: string, _id: number, scope: bigint | string = PERM.PERM_ALL): Promise<User> {
         if (cache.has(`id/${_id}/${domainId}`)) return cache.get(`id/${_id}/${domainId}`) || null;
@@ -271,7 +268,7 @@ class UserModel {
             deleteUserCache(udoc);
         }
         const res = await coll.findOneAndUpdate({ _id: uid }, op, { returnDocument: 'after' });
-        deleteUserCache(res.value);
+        deleteUserCache(res);
         return res;
     }
 
@@ -293,8 +290,8 @@ class UserModel {
             { $set: { salt, hash: await pwhash(password, salt), hashType: 'hydro' } },
             { returnDocument: 'after' },
         );
-        deleteUserCache(res.value);
-        return res.value;
+        deleteUserCache(res);
+        return res;
     }
 
     @ArgMethod
@@ -319,7 +316,7 @@ class UserModel {
             autoAlloc = true;
         }
         const salt = String.random();
-        while (true) { // eslint-disable-line no-constant-condition
+        while (true) {
             try {
                 // eslint-disable-next-line no-await-in-loop
                 await coll.insertOne({
@@ -339,6 +336,12 @@ class UserModel {
                     priv,
                     avatar: `gravatar:${mail}`,
                 });
+                // eslint-disable-next-line no-await-in-loop
+                await domain.collUser.updateOne(
+                    { uid, domainId: 'system' },
+                    { $set: { join: true } },
+                    { upsert: true },
+                );
                 return uid;
             } catch (e) {
                 if (e?.code === 11000) {
@@ -424,8 +427,8 @@ class UserModel {
             { $set: { priv } },
             { returnDocument: 'after' },
         );
-        deleteUserCache(res.value);
-        return res.value;
+        deleteUserCache(res);
+        return res;
     }
 
     @ArgMethod
@@ -471,22 +474,24 @@ class UserModel {
     }
 }
 
-bus.on('ready', () => Promise.all([
-    db.ensureIndexes(
-        coll,
-        { key: { unameLower: 1 }, name: 'uname', unique: true },
-        { key: { mailLower: 1 }, name: 'mail', unique: true },
-    ),
-    db.ensureIndexes(
-        collV,
-        { key: { unameLower: 1 }, name: 'uname', unique: true },
-        { key: { mailLower: 1 }, name: 'mail', unique: true },
-    ),
-    db.ensureIndexes(
-        collGroup,
-        { key: { domainId: 1, name: 1 }, name: 'name', unique: true },
-        { key: { domainId: 1, uids: 1 }, name: 'uid' },
-    ),
-]));
+export async function apply() {
+    await Promise.all([
+        db.ensureIndexes(
+            coll,
+            { key: { unameLower: 1 }, name: 'uname', unique: true },
+            { key: { mailLower: 1 }, name: 'mail', unique: true },
+        ),
+        db.ensureIndexes(
+            collV,
+            { key: { unameLower: 1 }, name: 'uname', unique: true },
+            { key: { mailLower: 1 }, name: 'mail', unique: true },
+        ),
+        db.ensureIndexes(
+            collGroup,
+            { key: { domainId: 1, name: 1 }, name: 'name', unique: true },
+            { key: { domainId: 1, uids: 1 }, name: 'uid' },
+        ),
+    ]);
+}
 export default UserModel;
 global.Hydro.model.user = UserModel;

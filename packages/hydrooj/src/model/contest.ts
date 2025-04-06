@@ -9,7 +9,7 @@ import {
     BaseUserDict, ContestRule, ContestRules, ProblemDict, RecordDoc,
     ScoreboardConfig, ScoreboardNode, ScoreboardRow, SubtaskResult, Tdoc,
 } from '../interface';
-import * as bus from '../service/bus';
+import bus from '../service/bus';
 import db from '../service/db';
 import type { Handler } from '../service/server';
 import { Optional } from '../typeutils';
@@ -91,7 +91,6 @@ const acm = buildContestRule({
     submitAfterAccept: false,
     showScoreboard: (tdoc, now) => now > tdoc.beginAt,
     showSelfRecord: () => true,
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
     showRecord: (tdoc, now) => now > tdoc.endAt && !isLocked(tdoc),
     stat(tdoc, journal: AcmJournal[]) {
         const naccept = Counter<number>();
@@ -100,12 +99,11 @@ const acm = buildContestRule({
         const detail: Record<number, AcmDetail> = {};
         let accept = 0;
         let time = 0;
-        // eslint-disable-next-line @typescript-eslint/no-use-before-define
         const lockAt = isLocked(tdoc) ? tdoc.lockAt : null;
         for (const j of journal) {
             if (!tdoc.pids.includes(j.pid)) continue;
             if (!this.submitAfterAccept && display[j.pid]?.status === STATUS.STATUS_ACCEPTED) continue;
-            if (![STATUS.STATUS_ACCEPTED, STATUS.STATUS_COMPILE_ERROR, STATUS.STATUS_FORMAT_ERROR].includes(j.status)) {
+            if (![STATUS.STATUS_ACCEPTED, STATUS.STATUS_COMPILE_ERROR, STATUS.STATUS_FORMAT_ERROR, STATUS.STATUS_CANCELED].includes(j.status)) {
                 naccept[j.pid]++;
             }
             const real = Math.floor((j.rid.getTimestamp().getTime() - tdoc.beginAt.getTime()) / 1000);
@@ -281,7 +279,7 @@ const oi = buildContestRule({
         const detail = {};
         const display = {};
         let score = 0;
-        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+
         const lockAt = isLocked(tdoc) ? tdoc.lockAt : null;
         for (const j of journal.filter((i) => tdoc.pids.includes(i.pid))) {
             if (lockAt && j.rid.getTimestamp() > lockAt) {
@@ -291,9 +289,8 @@ const oi = buildContestRule({
                 continue;
             }
             if (!detail[j.pid] || detail[j.pid].score < j.score || this.submitAfterAccept) {
-                detail[j.pid] = j;
-                display[j.pid] ||= {};
-                display[j.pid] = j;
+                detail[j.pid] = { ...j };
+                display[j.pid] = { ...j };
             }
         }
         for (const i in display) {
@@ -360,10 +357,10 @@ const oi = buildContestRule({
                 accepted[s.pid] = true;
             }
         }
-        const tsddict = (config.lockAt ? tsdoc.display : tsdoc.detail) || {};
+        const tsddict = ((config.lockAt && isLocked(tdoc, new Date())) ? tsdoc.display : tsdoc.detail) || {};
         for (const pid of tdoc.pids) {
             const index = `${tsdoc.uid}/${tdoc.domainId}/${pid}`;
-            // eslint-disable-next-line @typescript-eslint/no-use-before-define
+
             const node: ScoreboardNode = (!config.isExport && !config.lockAt && isDone(tdoc)
                 && meta?.psdict?.[index]?.rid
                 && tsddict[pid]?.rid?.toHexString() !== meta?.psdict?.[index]?.rid?.toHexString()
@@ -387,8 +384,10 @@ const oi = buildContestRule({
                     raw: tsddict[pid]?.rid || null,
                     score: tsddict[pid]?.score,
                 };
-            if (tsddict[pid]?.status === STATUS.STATUS_ACCEPTED && tsddict[pid]?.rid.getTimestamp().getTime() === meta?.first?.[pid]) {
-                node.style = 'background-color: rgb(217, 240, 199);';
+            if (tsddict[pid]?.status === STATUS.STATUS_ACCEPTED) {
+                if (tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]) {
+                    node.style = 'background-color: rgb(217, 240, 199);';
+                }
             }
             row.push(node);
         }
@@ -400,16 +399,14 @@ const oi = buildContestRule({
         const udict = await user.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
         const psdict = {};
         const first = {};
-        await Promise.all(tdoc.pids.map(async (pid) => {
-            // eslint-disable-next-line @typescript-eslint/no-use-before-define
-            const [data] = await getMultiStatus(tdoc.domainId, {
-                docType: document.TYPE_CONTEST,
-                docId: tdoc.docId,
-                [`detail.${pid}.status`]: STATUS.STATUS_ACCEPTED,
-            }).sort({ [`detail.${pid}.rid`]: 1 }).limit(1).toArray();
-            first[pid] = data ? data.detail[pid].rid.getTimestamp().getTime() : Date.now() / 1000;
-        }));
-        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        for (const [, tsdoc] of rankedTsdocs) {
+            for (const [pid, detail] of Object.entries(tsdoc.detail || {})) {
+                if (detail.status !== STATUS.STATUS_ACCEPTED) continue;
+                const time = detail.rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime();
+                if (!first[pid] || first[pid] > time) first[pid] = time;
+            }
+        }
+
         if (isDone(tdoc)) {
             const psdocs = await Promise.all(
                 tdoc.pids.map((pid) => problem.getMultiStatus(tdoc.domainId, { docId: pid, uid: { $in: uids } }).toArray()),
@@ -451,7 +448,7 @@ const oi = buildContestRule({
 const ioi = buildContestRule({
     TEXT: 'IOI',
     submitAfterAccept: false,
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+
     showRecord: (tdoc, now) => now > tdoc.endAt && !isLocked(tdoc),
     showSelfRecord: () => true,
     showScoreboard: (tdoc, now) => now > tdoc.beginAt,
@@ -511,7 +508,8 @@ const strictioi = buildContestRule({
                 hover: Object.values(tsddict[pid]?.subtasks || {}).map((i: SubtaskResult) => `${STATUS_SHORT_TEXTS[i.status]} ${i.score}`).join(','),
                 raw: tsddict[pid]?.rid,
                 score: tsddict[pid]?.score,
-                style: tsddict[pid]?.status === STATUS.STATUS_ACCEPTED && tsddict[pid]?.rid.getTimestamp().getTime() === meta?.first?.[pid]
+                style: tsddict[pid]?.status === STATUS.STATUS_ACCEPTED
+                    && tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]
                     ? 'background-color: rgb(217, 240, 199);'
                     : undefined,
             });
@@ -587,7 +585,8 @@ const ledo = buildContestRule({
                 hover: tsddict[pid]?.ntry ? `-${tsddict[pid].ntry} (${Math.round(Math.max(0.7, 0.95 ** tsddict[pid].ntry) * 100)}%)` : '',
                 raw: tsddict[pid]?.rid,
                 score: tsddict[pid]?.score,
-                style: tsddict[pid]?.status === STATUS.STATUS_ACCEPTED && tsddict[pid]?.rid.getTimestamp().getTime() === meta?.first?.[pid]
+                style: tsddict[pid]?.status === STATUS.STATUS_ACCEPTED
+                    && tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]
                     ? 'background-color: rgb(217, 240, 199);'
                     : undefined,
             });
