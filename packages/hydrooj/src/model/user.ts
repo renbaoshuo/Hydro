@@ -161,7 +161,7 @@ export class User {
 
     serialize(_, h) {
         if (!this._isPrivate) {
-            const fields = ['_id', 'uname', 'avatar', 'mail', 'perm', 'role', 'priv', 'regat', 'loginat', 'tfa', 'authn'];
+            const fields = ['_id', 'uname', 'avatar', 'mail', 'perm', 'role', 'priv', 'regat', 'loginat', 'tfa', 'authn', 'bio', 'gender', 'nAccept', 'nSubmit', 'qq', 'wechat'];
             if (h?.user?.hasPerm(PERM.PERM_VIEW_DISPLAYNAME)) fields.push('displayName');
             return pick(this, fields);
         }
