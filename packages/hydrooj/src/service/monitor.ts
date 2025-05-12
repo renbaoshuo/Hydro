@@ -109,5 +109,5 @@ export async function apply(ctx: Context) {
         { upsert: true },
     );
     feedback();
-    return ctx.setInterval(update, 1800 * 1000); // eslint-disable-line
+    return ctx.interval(update, 1800 * 1000); // eslint-disable-line
 }

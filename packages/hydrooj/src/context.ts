@@ -1,6 +1,6 @@
-import * as cordis from '@cordisjs/core';
-import LoggerService from '@cordisjs/logger';
+import LoggerService from '@cordisjs/plugin-logger';
 import { TimerService } from '@cordisjs/plugin-timer';
+import * as cordis from 'cordis';
 import Schema from 'schemastery';
 import type { DomainDoc, GeoIP, ModuleInterfaces } from './interface';
 import { inject } from './lib/ui';
@@ -18,14 +18,14 @@ function addScript<K>(name: string, description: string, validate: Schema<K>, ru
 }
 
 function provideModule<T extends keyof ModuleInterfaces>(type: T, id: string, module: ModuleInterfaces[T]) {
-    if (global.Hydro.module[type][id]) throw new Error(`duplicate script ${type}/${id} registered.`);
+    if (global.Hydro.module[type][id]) throw new Error(`duplicate module ${type}/${id} registered.`);
     global.Hydro.module[type as any][id] = module;
     return () => delete global.Hydro.module[type][id];
 }
 
-export type EffectScope = cordis.EffectScope<Context>;
+export type Fiber = cordis.Fiber<Context>;
 
-export { Disposable, Plugin, ScopeStatus } from '@cordisjs/core';
+export { Disposable, Plugin, FiberState } from 'cordis';
 
 export interface Context extends cordis.Context {
     [Context.events]: EventMap & cordis.Events<Context>;
@@ -50,7 +50,7 @@ const T = <F extends (...args: any[]) => any>(origFunc: F, disposeFunc?) =>
         });
     };
 
-export class ApiMixin extends cordis.Service<never, Context> {
+export class ApiMixin extends Service {
     addScript = T(addScript);
     setImmediate = T(setImmediate, clearImmediate);
     provideModule = T(provideModule);
@@ -74,13 +74,3 @@ export class Context extends cordis.Context {
         this.plugin(LoggerService);
     }
 }
-
-const old = cordis.Registry.prototype.inject;
-// cordis.Registry.prototype.using = old;
-cordis.Registry.prototype.inject = function wrapper(...args) {
-    if (typeof args[0] === 'string') {
-        console.warn('old functionality of ctx.inject is deprecated. please use ctx.injectUI instead.');
-        return T(inject).call(this, ...args as any) as any;
-    }
-    return old.call(this, ...args);
-};

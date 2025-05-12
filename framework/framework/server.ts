@@ -2,7 +2,7 @@ import http from 'http';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
-import { Context as CordisContext, Service } from '@cordisjs/core';
+import { Context as CordisContext, Service } from 'cordis';
 import type { Files } from 'formidable';
 import fs from 'fs-extra';
 import Koa from 'koa';
@@ -343,6 +343,7 @@ export class WebService<C extends CordisContext = CordisContext> extends Service
     private handlerLayers = [];
     private wsLayers = [];
     private captureAllRoutes = Object.create(null);
+    private customDefaultContext: C;
 
     renderers: Record<string, Renderer> = Object.create(null);
     server = koa;
@@ -449,7 +450,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             ...this.handlerLayers,
             {
                 name: '404',
-                func: (t) => this.handleHttp(t, NotFoundHandler, () => true, this.ctx),
+                func: (t) => this.handleHttp(t, NotFoundHandler, () => true, this.customDefaultContext || this.ctx),
             },
         ]));
         this.addLayer('base', base(logger, this.config.xff, this.config.xhost));
@@ -502,16 +503,18 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             await (this.ctx.parallel as any)('handler/create/http', h);
 
             if (checker) checker.call(h);
-            if (method === 'post') {
-                if (operation) {
-                    if (typeof h[`post${operation}`] !== 'function') {
-                        throw new InvalidOperationError(operation);
+            if (typeof h.all !== 'function') {
+                if (method === 'post') {
+                    if (operation) {
+                        if (typeof h[`post${operation}`] !== 'function') {
+                            throw new InvalidOperationError(operation);
+                        }
+                    } else if (typeof h.post !== 'function') {
+                        throw new MethodNotAllowedError(method);
                     }
-                } else if (typeof h.post !== 'function') {
+                } else if (typeof h[method] !== 'function') {
                     throw new MethodNotAllowedError(method);
                 }
-            } else if (typeof h[method] !== 'function' && typeof h.all !== 'function') {
-                throw new MethodNotAllowedError(method);
             }
 
             const steps = [
@@ -625,7 +628,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             for (const { name, target } of h.__subscribe || []) sub.ctx.on(name, target.bind(h));
             if (layer) {
                 let lastHeartbeat = Date.now();
-                sub.ctx.setInterval(() => {
+                sub.ctx.interval(() => {
                     if (Date.now() - lastHeartbeat > 80000) {
                         clean();
                         conn.terminate();
@@ -731,6 +734,21 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             this.registrationCount[name]--;
             if (!this.registrationCount[name]) delete this.registry[name];
             dispose();
+        });
+    }
+
+    public setDefaultContext(ctx: C) {
+        try {
+            if (!ctx.server) throw new Error();
+        } catch (e) {
+            throw new Error('Must provide a valid context with server.');
+        }
+        this.ctx.effect(async () => {
+            if (this.customDefaultContext) logger.warn('Default context already set.');
+            this.customDefaultContext = ctx;
+            return () => {
+                this.customDefaultContext = null;
+            };
         });
     }
 
@@ -841,7 +859,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
     }
 }
 
-declare module '@cordisjs/core' {
+declare module 'cordis' {
     interface Context {
         server: WebService<this>;
         Route: WebService<this>['Route'];

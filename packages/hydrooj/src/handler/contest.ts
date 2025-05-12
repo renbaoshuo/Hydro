@@ -1,10 +1,11 @@
-import AdmZip from 'adm-zip';
+import { Readable } from 'stream';
+import { BlobWriter, TextReader, ZipWriter } from '@zip.js/zip.js';
 import { stringify as toCSV } from 'csv-stringify/sync';
-import { pick } from 'lodash';
+import { escapeRegExp, pick } from 'lodash';
 import moment from 'moment-timezone';
 import { ObjectId } from 'mongodb';
 import {
-    Counter, sortFiles, streamToBuffer, Time, yaml,
+    Counter, sortFiles, Time, yaml,
 } from '@hydrooj/utils/lib/utils';
 import { Context, Service } from '../context';
 import {
@@ -33,14 +34,17 @@ export class ContestListHandler extends Handler {
     @param('rule', Types.Range(contest.RULES), true)
     @param('group', Types.Name, true)
     @param('page', Types.PositiveInt, true)
-    async get(domainId: string, rule = '', group = '', page = 1) {
+    @param('q', Types.String, true)
+    async get(domainId: string, rule = '', group = '', page = 1, q = '') {
         if (rule && contest.RULES[rule].hidden) throw new BadRequestError();
         const groups = (await user.listGroup(domainId, this.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST) ? undefined : this.user._id))
             .map((i) => i.name);
         if (group && !groups.includes(group)) throw new NotAssignedError(group);
         const rules = Object.keys(contest.RULES).filter((i) => !contest.RULES[i].hidden);
-        const q = {
-            ...this.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST) && !group
+        const escaped = escapeRegExp(q.toLowerCase());
+        const $regex = new RegExp(q.length >= 2 ? escaped : `\\A${escaped}`, 'gmi');
+        const filter = {
+            ...(this.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST) && !group)
                 ? {}
                 : {
                     $or: [
@@ -52,11 +56,13 @@ export class ContestListHandler extends Handler {
                 },
             ...rule ? { rule } : { rule: { $in: rules } },
             ...group ? { assign: { $in: [group] } } : {},
+            ...q ? { title: { $regex } } : {},
         };
-        await this.ctx.parallel('contest/list', q, this);
-        const cursor = contest.getMulti(domainId, q).sort({ endAt: -1, beginAt: -1, _id: -1 });
+        await this.ctx.parallel('contest/list', filter, this);
+        const cursor = contest.getMulti(domainId, filter).sort({ endAt: -1, beginAt: -1, _id: -1 });
         let qs = rule ? `rule=${rule}` : '';
         if (group) qs += qs ? `&group=${group}` : `group=${group}`;
+        if (q) qs += `${qs ? '&' : ''}q=${encodeURIComponent(q)}`;
         const [tdocs, tpcount] = await this.paginate(cursor, page, 'contest');
         const tids = [];
         for (const tdoc of tdocs) tids.push(tdoc.docId);
@@ -64,7 +70,7 @@ export class ContestListHandler extends Handler {
         const groupsFilter = groups.filter((i) => !Number.isSafeInteger(+i));
         this.response.template = 'contest_main.html';
         this.response.body = {
-            page, tpcount, qs, rule, tdocs, tsdict, groups: groupsFilter, group,
+            page, tpcount, qs, rule, tdocs, tsdict, groups: groupsFilter, group, q,
         };
     }
 }
@@ -210,8 +216,8 @@ export class ContestProblemListHandler extends ContestDetailBaseHandler {
             : [Object.fromEntries(psdocs.map((i) => [i.rid, { _id: i.rid }])), []];
         if (!this.user.own(this.tdoc) && !this.user.hasPerm(PERM.PERM_EDIT_CONTEST)) {
             this.response.body.rdocs = this.response.body.rdocs.map((rdoc) => contest.applyProjection(this.tdoc, rdoc, this.user));
-            for (const psdoc of psdocs) {
-                this.response.body.rdict[psdoc.rid] = contest.applyProjection(this.tdoc, this.response.body.rdict[psdoc.rid], this.user);
+            for (const key in this.response.body.rdict) {
+                this.response.body.rdict[key] = contest.applyProjection(this.tdoc, this.response.body.rdict[key], this.user);
             }
             for (const key in this.response.body.psdict) {
                 this.response.body.psdict[key] = contest.applyProjection(this.tdoc, this.response.body.psdict[key], this.user);
@@ -394,7 +400,7 @@ export class ContestCodeHandler extends Handler {
                 }
             }
         }
-        const zip = new AdmZip();
+        const zip = new ZipWriter(new BlobWriter('application/zip'), { bufferedWrite: true });
         const rdocs = await record.getMulti(domainId, {
             _id: { $in: Array.from(Object.keys(rnames)).map((id) => new ObjectId(id)) },
         }).toArray();
@@ -402,15 +408,15 @@ export class ContestCodeHandler extends Handler {
             if (rdoc.files?.code) {
                 const [id, filename] = rdoc.files?.code?.split('#') || [];
                 if (!id) return;
-                zip.addFile(
+                await zip.add(
                     `${rnames[rdoc._id.toHexString()]}.${filename || 'txt'}`,
-                    await streamToBuffer(await storage.get(`submission/${id}`)),
+                    Readable.toWeb(await storage.get(`submission/${id}`)),
                 );
             } else if (rdoc.code) {
-                zip.addFile(`${rnames[rdoc._id.toHexString()]}.${rdoc.lang}`, Buffer.from(rdoc.code));
+                await zip.add(`${rnames[rdoc._id.toHexString()]}.${rdoc.lang}`, new TextReader(rdoc.code));
             }
         }));
-        this.binary(zip.toBuffer(), `${tdoc.title}.zip`);
+        this.binary(await zip.close(), `${tdoc.title}.zip`);
     }
 }
 
@@ -735,33 +741,6 @@ export async function apply(ctx: Context) {
             }
         }
         await Promise.all(tasks);
-    });
-    ctx.inject(['api'], ({ api }) => {
-        api.value('Contest', [
-            ['_id', 'ObjectID!'],
-            ['domainId', 'String!'],
-            ['docId', 'ObjectID!'],
-            ['owner', 'Int!'],
-            ['beginAt', 'Date!'],
-            ['title', 'String!'],
-            ['content', 'String!'],
-            ['beginAt', 'Date!'],
-            ['endAt', 'Date!'],
-            ['attend', 'Int!'],
-            ['pids', '[Int]!'],
-            ['rated', 'Boolean!'],
-        ]);
-        api.resolver(
-            'Query', 'contest(id: ObjectID!)', 'Contest',
-            async (arg, c) => {
-                c.checkPerm(PERM.PERM_VIEW);
-                arg.id = new ObjectId(arg.id);
-                c.tdoc = await contest.get(c.args.domainId, new ObjectId(arg.id));
-                if (!c.tdoc) throw new ContestNotFoundError(c.args.domainId, arg.id);
-                return c.tdoc;
-            },
-            'Get a contest by ID',
-        );
     });
     ctx.plugin(ScoreboardService);
     ctx.inject(['scoreboard'], ({ Route, scoreboard }) => {

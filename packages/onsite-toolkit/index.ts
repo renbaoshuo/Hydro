@@ -1,9 +1,9 @@
 /* eslint-disable max-len */
 import moment from 'moment';
 import {
-    AdmZip, avatar, ContestModel, ContestNotEndedError, Context, db, findFileSync,
+    avatar, ContestModel, ContestNotEndedError, Context, db, findFileSync,
     ForbiddenError, fs, ObjectId, parseTimeMS, PERM, ProblemConfig, ProblemModel,
-    STATUS, STATUS_SHORT_TEXTS, STATUS_TEXTS, Time, UserModel,
+    STATUS, STATUS_SHORT_TEXTS, STATUS_TEXTS, Time, UserModel, Zip,
 } from 'hydrooj';
 import { ResolverInput } from './interface';
 
@@ -113,7 +113,7 @@ export function apply(ctx: Context) {
                 const groupId = {};
                 let gid = 1;
                 for (const i of relatedGroups) groupId[i] = `group-${gid++}`;
-                const organizations = teams.flatMap((i) => i.organization);
+                const organizations = Array.from(new Set(teams.flatMap((i) => i.organization)));
                 const orgId = {};
                 let oid = 1;
                 for (const i of organizations) orgId[i] = `org-${oid++}`;
@@ -248,19 +248,22 @@ export function apply(ctx: Context) {
                         finalized: moment().format('YYYY-MM-DDTHH:mm:ss.SSS+08:00'),
                     }),
                 ];
-                const zip = new AdmZip();
-                zip.addFile('event-feed.ndjson', Buffer.from(eventfeed.concat(submissions).concat(endState).map((i) => JSON.stringify(i)).join('\n')));
-                zip.addFile('contest/logo.png', fs.readFileSync(findFileSync('@hydrooj/onsite-toolkit/public/logo.png')));
-                for (const i of ['teams', 'organizations']) {
-                    zip.addFile(`${i}/`, Buffer.alloc(0));
-                }
-                for (const i of teams) {
-                    zip.addFile(`teams/${i.team_id}/photo.download.txt`, Buffer.from(i.avatar));
-                }
-                for (const i of organizations) {
-                    zip.addFile(`organizations/${orgId[i]}/photo.download.txt`, Buffer.from(avatar(teams.find((j) => j.organization === i)?.avatar || 'no photo, find and download it yourself')));
-                }
-                this.binary(zip.toBuffer(), `contest-${tdoc._id}-cdp.zip`);
+                const zip = new Zip.ZipWriter(new Zip.BlobWriter());
+                await Promise.all([
+                    zip.add('event-feed.ndjson', new Zip.TextReader(eventfeed.concat(submissions).concat(endState).map((i) => JSON.stringify(i)).join('\n'))),
+                    zip.add('contest/logo.png', new Zip.BlobReader(new Blob([fs.readFileSync(findFileSync('@hydrooj/onsite-toolkit/public/logo.png'))]))),
+                    zip.add('teams/', null, { directory: true }),
+                    zip.add('organizations/', null, { directory: true }),
+                ]);
+                await Promise.all(teams.map(async (i) => {
+                    await zip.add(`teams/${i.team_id}/`, null, { directory: true });
+                    await zip.add(`teams/${i.team_id}/photo.download.txt`, new Zip.TextReader(i.avatar));
+                }));
+                await Promise.all(organizations.map(async (i) => {
+                    await zip.add(`organizations/${orgId[i]}/`, null, { directory: true });
+                    await zip.add(`organizations/${orgId[i]}/photo.download.txt`, new Zip.TextReader(avatar(teams.find((j) => j.organization === i)?.avatar || 'no photo, find and download it yourself')));
+                }));
+                this.binary(await zip.close(), `contest-${tdoc._id}-cdp.zip`);
             },
             supportedRules: ['acm'],
         });

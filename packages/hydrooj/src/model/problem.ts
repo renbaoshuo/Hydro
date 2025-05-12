@@ -2,14 +2,16 @@
 import child from 'child_process';
 import os from 'os';
 import path from 'path';
-import AdmZip from 'adm-zip';
+import { Readable } from 'stream';
+import { Entry, ZipReader } from '@zip.js/zip.js';
 import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { keyBy, pick } from 'lodash';
 import { Filter, ObjectId } from 'mongodb';
-import type { Readable } from 'stream';
 import { ProblemConfigFile, ProblemType } from '@hydrooj/common';
-import { Logger, size, streamToBuffer } from '@hydrooj/utils/lib/utils';
+import {
+    extractZip, Logger, size, streamToBuffer,
+} from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
 import { FileUploadError, ProblemNotFoundError, ValidationError } from '../error';
 import type {
@@ -143,6 +145,7 @@ export class ProblemModel {
         tag: string[] = [], meta: ProblemCreateOptions = {},
     ) {
         const [doc] = await ProblemModel.getMulti(domainId, {})
+            .withReadPreference('primary')
             .sort({ docId: -1 }).limit(1).project({ docId: 1 })
             .toArray();
         const result = await ProblemModel.addWithId(
@@ -452,22 +455,20 @@ export class ProblemModel {
         const {
             preferredPrefix, progress, override = false, operator = 1,
         } = options;
+        let delSource = options.delSource;
         let problems: string[];
         try {
             if (filepath.endsWith('.zip')) {
                 tmpdir = path.join(os.tmpdir(), 'hydro', `${Math.random()}.import`);
-                let zip: AdmZip;
+                const zip = new ZipReader(Readable.toWeb(fs.createReadStream(filepath)));
+                let entries: Entry[];
                 try {
-                    zip = new AdmZip(filepath);
+                    entries = await zip.getEntries();
                 } catch (e) {
                     throw new ValidationError('zip', null, e.message);
                 }
-                await new Promise((resolve, reject) => {
-                    zip.extractAllToAsync(tmpdir, true, false, (err) => {
-                        if (err) reject(err);
-                        resolve(null);
-                    });
-                });
+                delSource = true;
+                await extractZip(entries, tmpdir);
             } else if (fs.statSync(filepath).isDirectory()) {
                 tmpdir = filepath;
             } else {
@@ -480,7 +481,8 @@ export class ProblemModel {
                 problems = files.filter((f) => f.isDirectory()).map((i) => i.name);
             }
         } catch (e) {
-            if (options.delSource) await fs.remove(tmpdir);
+            if (delSource) await fs.remove(tmpdir);
+            throw e;
         }
         for (const i of problems) {
             try {
@@ -624,7 +626,7 @@ export class ProblemModel {
                 (process.env.HYDRO_CLI ? logger.info : progress)?.(`Error importing problem ${i}: ${e.message}`);
             }
         }
-        if (options.delSource) await fs.remove(tmpdir);
+        if (delSource) await fs.remove(tmpdir);
     }
 
     static async export(domainId: string, pidFilter = '') {

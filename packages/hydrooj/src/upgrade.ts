@@ -550,6 +550,9 @@ export const coreScripts: MigrationScript[] = [
             }
         }
         await iterateAllProblem(['domainId', 'docId', 'tag'], async (pdoc) => {
+            if (pdoc.tag && ['string', 'number'].includes(typeof pdoc.tag)) {
+                return { tag: [pdoc.tag.toString().trim()].filter((i) => i) };
+            }
             if (pdoc.tag?.some((i) => typeof i !== 'string')) {
                 return { tag: pdoc.tag.filter((i) => i).map((i) => i.toString()) };
             }
@@ -597,6 +600,18 @@ export const coreScripts: MigrationScript[] = [
             for (const r of old) {
                 if ((r._id as any).endsWith('@github.local')) await c.oauth.set('github', (r._id as any).split('@')[0], r.uid);
             }
+        });
+        return true;
+    },
+    async function _93_94(ctx) {
+        await ctx.inject(['oauth'], async (c) => {
+            await c.oauth.coll.deleteMany({ _id: { $type: 'string' } });
+            const docs = await c.oauth.coll.find({ id: { $type: 'number' as any } }).toArray();
+            const op = c.oauth.coll.initializeUnorderedBulkOp();
+            for (const doc of docs) {
+                op.find({ _id: doc._id }).updateOne({ $set: { id: doc.id.toString() } });
+            }
+            if (op.length) await op.execute();
         });
         return true;
     },
