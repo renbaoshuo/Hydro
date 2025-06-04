@@ -75,6 +75,11 @@ export class User {
     group?: string[];
     [key: string]: any;
 
+    static _allowedFields = [
+        '_id', 'uname', 'avatar', 'mail', 'perm', 'role', 'priv', 'regat',
+        'loginat', 'tfa', 'authn', 'bio', 'gender', 'nAccept', 'nSubmit', 'qq', 'wechat',
+    ];
+
     constructor(udoc: Udoc, dudoc, scope = PERM.PERM_ALL) {
         this._id = udoc._id;
 
@@ -109,6 +114,10 @@ export class User {
         for (const key in setting.DOMAIN_USER_SETTINGS_BY_KEY) {
             this[key] = dudoc[key] ?? (setting.DOMAIN_USER_SETTINGS_BY_KEY[key].value || system.get(`preference.${key}`));
         }
+    }
+
+    static addAllowedFields(...fields: string[]) {
+        User._allowedFields.push(...fields);
     }
 
     async init() {
@@ -161,8 +170,7 @@ export class User {
 
     serialize(h) {
         if (!this._isPrivate) {
-            const fields = ['_id', 'uname', 'avatar', 'mail', 'perm', 'role', 'priv', 'regat',
-                'loginat', 'tfa', 'authn', 'bio', 'gender', 'nAccept', 'nSubmit', 'qq', 'wechat'];
+            const fields = [...new Set(User._allowedFields)];
             if (h?.user?.hasPerm(PERM.PERM_VIEW_DISPLAYNAME)) fields.push('displayName');
             return pick(this, fields);
         }
