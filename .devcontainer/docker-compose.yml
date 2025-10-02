@@ -3,7 +3,7 @@ services:
     image: mongo:8
     restart: unless-stopped
     volumes:
-      - mongodb-data:/data/db
+      - mongodb-data-8:/data/db
   hydro:
     build: 
       context: .
@@ -18,6 +18,6 @@ services:
     command: go-judge
 
 volumes:
-  mongodb-data:
+  mongodb-data-8:
   node_modules:
   testdata:
