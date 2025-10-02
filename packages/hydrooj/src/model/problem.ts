@@ -13,7 +13,7 @@ import {
     extractZip, Logger, size, streamToBuffer,
 } from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
-import { FileUploadError, ProblemNotFoundError, ValidationError } from '../error';
+import { FileUploadError, NotFoundError, ProblemNotFoundError, ValidationError } from '../error';
 import type {
     Document, ProblemDict, ProblemStatusDoc, User,
 } from '../interface';
@@ -66,6 +66,7 @@ interface ProblemImportOptions {
     override?: boolean;
     operator?: number;
     delSource?: boolean;
+    hidden?: boolean;
 }
 
 interface ProblemCreateOptions {
@@ -231,19 +232,20 @@ export class ProblemModel {
     static async edit(domainId: string, _id: number, $set: Partial<ProblemDoc>): Promise<ProblemDoc> {
         const delpid = $set.pid === '';
         const ddoc = await DomainModel.get(domainId);
+        const $unset = delpid ? { pid: '' } : {};
         if (delpid) {
             delete $set.pid;
             $set.sort = sortable(`P${_id}`, ddoc.namespaces);
         } else if ($set.pid) {
             $set.sort = sortable($set.pid, ddoc.namespaces);
         }
-        await bus.parallel('problem/before-edit', $set);
-        const result = await document.set(domainId, document.TYPE_PROBLEM, _id, $set, delpid ? { pid: '' } : undefined);
+        await bus.parallel('problem/before-edit', $set, $unset);
+        const result = await document.set(domainId, document.TYPE_PROBLEM, _id, $set, $unset);
         await bus.emit('problem/edit', result);
         return result;
     }
 
-    static async copy(domainId: string, _id: number, target: string, pid?: string) {
+    static async copy(domainId: string, _id: number, target: string, pid?: string, hidden?: boolean) {
         const original = await ProblemModel.get(domainId, _id);
         if (!original) throw new ProblemNotFoundError(domainId, _id);
         if (original.reference) throw new ValidationError('reference');
@@ -251,7 +253,7 @@ export class ProblemModel {
         if (!pid && original.pid && !await ProblemModel.get(target, original.pid)) pid = original.pid;
         return await ProblemModel.add(
             target, pid, original.title, original.content,
-            original.owner, original.tag, { hidden: original.hidden, reference: { domainId, pid: _id } },
+            original.owner, original.tag, { hidden: hidden || original.hidden, reference: { domainId, pid: _id } },
         );
     }
 
@@ -419,10 +421,11 @@ export class ProblemModel {
         domainId: string, pid: number, uid: number,
         rid: ObjectId, status: number, score: number,
     ) {
-        const filter: Filter<ProblemStatusDoc> = { rid: { $ne: rid }, status: STATUS.STATUS_ACCEPTED };
-        const res = await document.setStatusIfNotCondition(
+        const condition = status === STATUS.STATUS_ACCEPTED ? {}
+            : { $or: [{ status: { $ne: STATUS.STATUS_ACCEPTED } }, { rid }] };
+        const res = await document.setStatusIfCondition(
             domainId, document.TYPE_PROBLEM, pid, uid,
-            filter, { rid, status, score },
+            condition, { rid, status, score },
         );
         return !!res;
     }
@@ -457,6 +460,8 @@ export class ProblemModel {
         } = options;
         let delSource = options.delSource;
         let problems: string[];
+        const ddoc = await DomainModel.get(domainId);
+        if (!ddoc) throw new NotFoundError(domainId);
         try {
             if (filepath.endsWith('.zip')) {
                 tmpdir = path.join(os.tmpdir(), 'hydro', `${Math.random()}.import`);
@@ -486,17 +491,24 @@ export class ProblemModel {
         }
         for (const i of problems) {
             try {
-                if (process.env.HYDRO_CLI) logger.info(`Importing problem ${i}`);
                 const files = await fs.readdir(path.join(tmpdir, i), { withFileTypes: true });
                 if (!files.find((f) => f.name === 'problem.yaml')) continue;
+                if (process.env.HYDRO_CLI) logger.info(`Importing problem ${i}`);
                 const content = fs.readFileSync(path.join(tmpdir, i, 'problem.yaml'), 'utf-8');
                 const pdoc: ProblemDoc = yaml.load(content) as any;
-                if (!pdoc) continue;
+                if (!pdoc) {
+                    if (process.env.HYDRO_CLI) logger.error(`Invalid problem.yaml ${i}`);
+                    continue;
+                }
                 let pid = pdoc.pid;
                 let overridePid = null;
 
                 const isValidPid = async (id: string) => {
-                    if (!(/^[A-Za-z][0-9A-Za-z]*$/.test(id))) return false;
+                    if (!(/^(?:[a-z0-9]{1,10}-)?[a-z][0-9a-z]*$/i.test(id))) return false;
+                    if (id.includes('-')) {
+                        const [prefix] = id.split('-');
+                        if (!ddoc?.namespaces?.[prefix]) return false;
+                    }
                     const doc = await ProblemModel.get(domainId, id);
                     if (doc) {
                         if (!override) return false;
@@ -559,10 +571,11 @@ export class ProblemModel {
                         content: overrideContent || pdoc.content?.toString() || 'No content',
                         tag,
                         difficulty: pdoc.difficulty,
+                        ...(options.hidden ? { hidden: true } : {}),
                     })).docId
                     : await ProblemModel.add(
                         domainId, pid, title.trim(), overrideContent || pdoc.content?.toString() || 'No content',
-                        operator || pdoc.owner, tag, { hidden: pdoc.hidden, difficulty: pdoc.difficulty },
+                        operator || pdoc.owner, tag, { hidden: options.hidden || pdoc.hidden, difficulty: pdoc.difficulty },
                     );
                 // TODO delete unused file when updating pdoc
                 for (const [f, loc] of await getFiles('testdata', 'attachments', 'generators', 'include')) {

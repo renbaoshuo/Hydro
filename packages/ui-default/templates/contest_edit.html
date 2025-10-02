@@ -132,6 +132,14 @@
           <h2 class="section__title">{{ _('Contest Settings') }}</h2>
         </div>
         <div class="section__body">
+          {{ form.form_text({
+            columns:12,
+            label:'Submission language limit',
+            name:'langs',
+            value:tdoc.langs|default(''),
+            placeholder:_("Seperated with ','"),
+            row:true
+          }) }}
           <div class="row">
             {{ form.form_checkbox({
               columns:2,
@@ -156,6 +164,14 @@
               name:'allowViewCode',
               placeholder:_('Allow user view others code after contest'),
               value:tdoc.allowViewCode|default(true),
+              row:false
+            }) }}
+            {{ form.form_checkbox({
+              columns:4,
+              label:'Allow Print',
+              name:'allowPrint',
+              placeholder:_('Allow user to print during contest'),
+              value:tdoc.allowPrint|default(false),
               row:false
             }) }}
             <div style="display: none" class="contest-rule-settings contest-rule--acm contest-rule--ioi">

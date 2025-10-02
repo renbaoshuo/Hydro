@@ -10,7 +10,7 @@ import esbuild from 'esbuild';
 
 declare module 'hydrooj' {
   interface UI {
-    esbuildPlugins?: esbuild.Plugin[]
+    esbuildPlugins?: esbuild.Plugin[];
   }
   interface SystemKeys {
     'ui-default.nav_logo_dark': string;
@@ -85,13 +85,19 @@ const build = async (contents: string) => {
   return res;
 };
 
+const applyCss = (css: string) => `
+  const style = document.createElement('style');
+  style.textContent = ${JSON.stringify(css)};
+  document.head.appendChild(style);
+`;
+
 export async function buildUI() {
   const start = Date.now();
   let totalSize = 0;
   const entryPoints: string[] = [];
   const lazyModules: string[] = [];
   const newFiles = ['entry.js'];
-  for (const addon of Object.values(global.addons)) {
+  for (const addon of Object.values(global.addons) as string[]) {
     let publicPath = resolve(addon, 'frontend');
     if (!fs.existsSync(publicPath)) publicPath = resolve(addon, 'public');
     if (!fs.existsSync(publicPath)) continue;
@@ -111,8 +117,10 @@ export async function buildUI() {
   for (const m of lazyModules) {
     const name = basename(m).split('.')[0];
     const { outputFiles } = await build(`window.lazyModuleResolver['${name}'](require('${relative(tmp, m).replace(/\\/g, '\\\\')}'))`);
+    const css = outputFiles.filter((i) => i.path.endsWith('.css')).map((i) => i.text).join('\n');
     for (const file of outputFiles) {
-      addFile(basename(m).replace(/\.[tj]sx?$/, '.js'), file.text);
+      if (file.path.endsWith('.css')) continue;
+      addFile(basename(m).replace(/\.[tj]sx?$/, '.js'), (css ? applyCss(css) : '') + file.text);
     }
   }
   for (const lang in global.Hydro.locales) {
@@ -129,9 +137,7 @@ export async function buildUI() {
   const pages = entry.outputFiles.filter((i) => i.path.endsWith('.js')).map((i) => i.text);
   const css = entry.outputFiles.filter((i) => i.path.endsWith('.css')).map((i) => i.text);
   addFile('entry.js', `window._hydroLoad=()=>{
-    const style = document.createElement('style');
-    style.textContent = ${JSON.stringify(css.join('\n'))};
-    document.head.appendChild(style);
+    ${css.length ? applyCss(css.join('\n')) : ''}
     ${pages.join('\n')}
   };`);
   UiContextBase.constantVersion = hashes['entry.js'];

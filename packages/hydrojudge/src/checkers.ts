@@ -1,4 +1,4 @@
-import { STATUS } from '@hydrooj/common';
+import { DetailType, STATUS } from '@hydrooj/common';
 import { FormatError, SystemError } from './error';
 import { CopyInFile, runQueued } from './sandbox';
 import { parse } from './testlib';
@@ -12,14 +12,14 @@ export interface CheckConfig {
     code: CopyInFile;
     copyIn: Record<string, CopyInFile>;
     score: number;
-    detail: boolean;
+    detail: DetailType;
     env?: Record<string, string>;
 }
 
 type Checker = (config: CheckConfig) => Promise<{
-    status: number,
-    score: number,
-    message: string,
+    status: number;
+    score: number;
+    message: string;
 }>;
 
 function parseDiffMsg(msg: string) {
@@ -58,12 +58,25 @@ function parseDiffMsg(msg: string) {
 
 const compareSh = `#!/bin/bash
 set -e
+process_file() {
+  cat $1 | awk '
+    /^$/{n=n RS};
+    /./{
+      printf "%s",n; n="";
+      for (i=length; i>0; i--) {
+        c = substr($0, i, 1);
+        if (c != " " && c != "\\t" && c != "\\r") break
+      }
+      if (i == 0) print ""
+      else print substr($0, 1, i);
+    }' >$2
+}
 if [ "$1" = "BZ" ]; then
-  cat usrout | awk '{sub(/[ \\t\\r]+$/, ""); print $0;}' | awk '/^$/{n=n RS}; /./{printf "%s",n; n=""; print}' >usrout.processed
-  cat answer | awk '{sub(/[ \\t\\r]+$/, ""); print $0;}' | awk '/^$/{n=n RS}; /./{printf "%s",n; n=""; print}' >answer.processed
+  process_file usrout usrout.processed
+  process_file answer answer.processed
 else
-  cat usrout | awk '{sub(/[\\r]+$/, ""); print $0;}' >usrout.processed
-  cat answer | awk '{sub(/[\\r]+$/, ""); print $0;}' >answer.processed
+  cat usrout | awk '{sub(/\\r+$/, ""); print $0;}' >usrout.processed
+  cat answer | awk '{sub(/\\r+$/, ""); print $0;}' >answer.processed
 fi
 usrsize=$(wc -c < usrout.processed)
 stdsize=$(wc -c < answer.processed)
@@ -85,7 +98,7 @@ elif [ -n "$result" ]; then
 fi
 `;
 
-const getDefaultChecker = (strict: boolean) => async (config) => {
+const getDefaultChecker = (strict: boolean) => async (config: CheckConfig) => {
     const { code, stdout } = await runQueued(`/bin/bash compare.sh${strict ? '' : ' BZ'}`, {
         copyIn: {
             usrout: config.user_stdout,
@@ -93,6 +106,7 @@ const getDefaultChecker = (strict: boolean) => async (config) => {
             ...config.copyIn,
             'compare.sh': { content: compareSh },
         },
+        processLimit: 32,
     });
     let status: number;
     let message: any = '';
@@ -101,7 +115,7 @@ const getDefaultChecker = (strict: boolean) => async (config) => {
         message = `Checker returned with status ${code}`;
     } else if (stdout) {
         status = STATUS.STATUS_WRONG_ANSWER;
-        if (config.detail && !strict) message = parseDiffMsg(stdout);
+        if (config.detail === 'full') message = parseDiffMsg(stdout);
     } else status = STATUS.STATUS_ACCEPTED;
     if (message.length > 1024000) message = '';
     return {
@@ -134,7 +148,7 @@ const checkers: Record<string, Checker> = new Proxy({
         return {
             status,
             score: status === STATUS.STATUS_ACCEPTED ? config.score : 0,
-            message: stdout,
+            message: config.detail === 'full' ? stdout : '',
         };
     },
 
@@ -167,7 +181,7 @@ const checkers: Record<string, Checker> = new Proxy({
         const score = Math.floor(+files.score) || 0;
         return {
             score,
-            message: files.message,
+            message: config.detail === 'full' ? files.message : '',
             status: score === config.score
                 ? STATUS.STATUS_ACCEPTED
                 : STATUS.STATUS_WRONG_ANSWER,
@@ -192,7 +206,7 @@ const checkers: Record<string, Checker> = new Proxy({
         return {
             status: st,
             score: (status === STATUS.STATUS_ACCEPTED) ? config.score : 0,
-            message: stdout,
+            message: config.detail === 'full' ? stdout : '',
         };
     },
 
@@ -205,7 +219,6 @@ const checkers: Record<string, Checker> = new Proxy({
      * stderr：输出错误报告
      */
     async syzoj(config) {
-        // eslint-disable-next-line prefer-const
         let { status, stdout, stderr } = await runQueued(config.execute, {
             copyIn: {
                 input: config.input,
@@ -218,7 +231,7 @@ const checkers: Record<string, Checker> = new Proxy({
         if (status !== STATUS.STATUS_ACCEPTED) throw new SystemError('Checker returned {0}.', [status]);
         const score = +stdout;
         status = score === 100 ? STATUS.STATUS_ACCEPTED : STATUS.STATUS_WRONG_ANSWER;
-        return { status, score: Math.floor((score * config.score) / 100), message: stderr };
+        return { status, score: Math.floor((score * config.score) / 100), message: config.detail === 'full' ? stderr : '' };
     },
 
     async testlib(config) {
@@ -251,7 +264,7 @@ const checkers: Record<string, Checker> = new Proxy({
                 message: `Checker exited with code ${code}`,
             };
         }
-        return parse(stderr, config.score);
+        return parse(stderr, config.score, config.detail);
     },
 
     // https://www.kattis.com/problem-package-format/spec/2023-07-draft.html#output-validator
@@ -284,7 +297,9 @@ const checkers: Record<string, Checker> = new Proxy({
 
         const message = status === STATUS.STATUS_SYSTEM_ERROR
             ? files['feedback_dir/judgeerror.txt'] || `Checker exited with code ${code}`
-            : files['feedback_dir/teammessage.txt'] || files['feedback_dir/judgemessage.txt'] || '';
+            : config.detail === 'full'
+                ? files['feedback_dir/teammessage.txt'] || files['feedback_dir/judgemessage.txt'] || ''
+                : '';
 
         return { status, score, message };
     },

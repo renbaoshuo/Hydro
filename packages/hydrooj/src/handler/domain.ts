@@ -173,11 +173,14 @@ class DomainUserHandler extends ManageHandler {
     @requireSudo
     @param('uids', Types.NumericArray)
     @param('role', Types.Role)
-    async postSetUsers(domainId: string, uid: number[], role: string) {
+    @param('join', Types.Boolean)
+    async postSetUsers(domainId: string, uid: number[], role: string, join = false) {
+        if (join) this.checkPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN);
         await Promise.all([
             domain.setUserRole(domainId, uid, role),
-            oplog.log(this, 'domain.setRole', { uid, role }),
+            oplog.log(this, 'domain.setRole', { uid, role, join }),
         ]);
+        if (join) await domain.setJoin(domainId, uid, true);
         this.back();
     }
 
@@ -187,8 +190,10 @@ class DomainUserHandler extends ManageHandler {
         const original = await domain.getMultiUserInDomain(domainId, { uid: { $in: uids } }).toArray();
         const needUpdate = uids.filter((uid) => original.find((i) => i.uid === uid)?.join);
         if (!needUpdate.length) return;
+        const target = needUpdate.length > 1 ? needUpdate : needUpdate[0];
         await Promise.all([
-            domain.setJoin(domainId, needUpdate.length > 1 ? needUpdate : needUpdate[0], false),
+            domain.setJoin(domainId, target, false),
+            domain.setUserRole(domainId, target, 'guest'),
             oplog.log(this, 'domain.kick', { uids: needUpdate }),
         ]);
         const msg = JSON.stringify({
@@ -214,6 +219,7 @@ class DomainPermissionHandler extends ManageHandler {
     async post({ domainId }) {
         const roles = {};
         for (const role in this.request.body) {
+            if (role === 'root') continue; // root role is not editable
             const perms = this.request.body[role] instanceof Array
                 ? this.request.body[role]
                 : [this.request.body[role]];
@@ -433,7 +439,7 @@ export const DomainApi = {
         }),
         async (ctx, args) => {
             if (!ctx.user.hasPerm(PERM.PERM_EDIT_DOMAIN)) throw new PermissionError(PERM.PERM_EDIT_DOMAIN);
-            if (args.uids) {
+            if (args.uids?.length) {
                 const res = await user.updateGroup(ctx.domain._id, args.name, args.uids);
                 return res.upsertedCount > 0;
             }
@@ -460,7 +466,7 @@ export async function apply(ctx: Context) {
     ctx.Route('domain_join_applications', '/domain/join_applications', DomainJoinApplicationsHandler);
     ctx.Route('domain_join', '/domain/join', DomainJoinHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route('domain_search', '/domain/search', DomainSearchHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.inject(['api'], ({ api }) => {
+    await ctx.inject(['api'], ({ api }) => {
         api.provide(DomainApi);
     });
 }

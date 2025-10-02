@@ -1,4 +1,3 @@
-/* eslint-disable object-curly-newline */
 import { pick, sum } from 'lodash';
 import moment from 'moment-timezone';
 import {
@@ -15,6 +14,7 @@ import { ArgMethod, buildProjection, Time } from '../utils';
 import { STATUS } from './builtin';
 import DomainModel from './domain';
 import problem from './problem';
+import * as SystemModel from './system';
 import task from './task';
 
 export default class RecordModel {
@@ -132,11 +132,11 @@ export default class RecordModel {
         domainId: string, pid: number, uid: number,
         lang: string, code: string, addTask: boolean,
         args: {
-            contest?: ObjectId,
-            input?: string,
-            files?: Record<string, string>,
-            hackTarget?: ObjectId,
-            type: 'judge' | 'rejudge' | 'pretest' | 'hack' | 'generate',
+            contest?: ObjectId;
+            input?: string;
+            files?: Record<string, string>;
+            hackTarget?: ObjectId;
+            type: 'judge' | 'rejudge' | 'pretest' | 'hack' | 'generate';
         } = { type: 'judge' },
     ) {
         const data: RecordDoc = {
@@ -291,6 +291,14 @@ export async function apply(ctx: Context) {
     ctx.on('domain/delete', (domainId) => RecordModel.coll.deleteMany({ domainId }));
     ctx.on('record/judge', async (rdoc, updated) => {
         if (rdoc.status === STATUS.STATUS_ACCEPTED && updated) {
+            if (SystemModel.get('record.statMode') === 'unique') {
+                await RecordModel.collStat.deleteMany({
+                    _id: { $ne: rdoc._id },
+                    uid: rdoc.uid,
+                    pid: rdoc.pid,
+                    domainId: rdoc.domainId,
+                });
+            }
             await RecordModel.collStat.updateOne({
                 _id: rdoc._id,
             }, {

@@ -1,14 +1,14 @@
 /* eslint-disable max-len */
 /* eslint-disable no-await-in-loop */
 import fs from 'fs';
-import * as cordis from 'cordis';
 import yaml from 'js-yaml';
 import { Dictionary } from 'lodash';
 import moment from 'moment-timezone';
+import saslPrep from 'saslprep';
 import Schema from 'schemastery';
 import { LangConfig, parseLang } from '@hydrooj/common';
-import { findFileSync, retry } from '@hydrooj/utils';
-import { Context, Service } from '../context';
+import { findFileSync, randomstring, retry } from '@hydrooj/utils';
+import { Context } from '../context';
 import { Setting as _Setting } from '../interface';
 import { Logger } from '../logger';
 import * as builtin from './builtin';
@@ -26,11 +26,6 @@ for (const country of countries) {
 }
 const timezones = Array.from(tzs).sort().map((tz) => [tz, tz]) as [string, string][];
 const langRange: Dictionary<string> = {};
-
-for (const lang in global.Hydro.locales) {
-    if (!global.Hydro.locales[lang].__interface) continue;
-    langRange[lang] = global.Hydro.locales[lang].__langname;
-}
 
 export const FLAG_HIDDEN = 1;
 export const FLAG_DISABLED = 2;
@@ -53,6 +48,7 @@ export type SettingType = 'text' | 'yaml' | 'number' | 'float' | 'markdown' | 'p
 export const Setting = (
     family: string, key: string, value: any = null,
     type: SettingType = 'text', name = '', desc = '', flag = 0,
+    validation?: (val: any) => boolean,
 ): _Setting => {
     let subType = '';
     if (type === 'yaml' && typeof value !== 'string') {
@@ -70,12 +66,13 @@ export const Setting = (
         subType,
         type: typeof type === 'object' ? 'select' : type,
         range: typeof type === 'object' ? type : null,
+        validation,
     };
 };
 
 declare global {
     namespace Schemastery {
-        interface Meta<T> { // eslint-disable-line @typescript-eslint/no-unused-vars
+        interface Meta<T> { // eslint-disable-line ts/no-unused-vars
             family?: string;
             secret?: boolean;
         }
@@ -88,14 +85,17 @@ function schemaToSettings(schema: Schema<any>) {
         if (s.dict) throw new Error('Dict is not supported here');
         let flag = (s.meta?.hidden ? FLAG_HIDDEN : 0)
             | (s.meta?.disabled ? FLAG_DISABLED : 0);
-        const type = s.type === 'number' ? 'number'
-            : s.type === 'boolean' ? 'checkbox'
-                : s.meta?.role === 'markdown' ? 'markdown'
-                    : s.meta?.role === 'textarea' ? 'textarea' : 'text';
+        const actualType = s.type === 'transform' ? s.inner.type : s.type;
+        const actualList = s.type === 'transform' ? s.inner.list : s.list;
+        const type = actualType === 'any' ? 'json'
+            : actualType === 'number' ? 'number'
+                : actualType === 'boolean' ? 'boolean'
+                    : s.meta?.role === 'markdown' ? 'markdown'
+                        : s.meta?.role === 'textarea' ? 'textarea' : 'text';
         if (s.meta?.role === 'password') flag |= FLAG_SECRET;
         const options = {};
-        for (const item of s.list || []) {
-            if (item.type !== 'const') throw new Error('List item must be a constant');
+        for (const item of actualList || []) {
+            if (item.type !== 'const') throw new Error(`List item must be a constant, got ${item.type}`);
             options[item.value] = item.meta?.description || item.value;
         }
         return {
@@ -106,8 +106,16 @@ function schemaToSettings(schema: Schema<any>) {
             desc: s.meta?.description,
             flag,
             subType: '',
-            type: s.list ? 'select' : type,
-            range: s.list ? options : null,
+            type: actualList ? 'select' : type,
+            range: actualList ? options : null,
+            validation: (v) => {
+                try {
+                    (s as any)(v);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            },
         } as _Setting;
     };
     if (!schema.dict) return [];
@@ -269,18 +277,16 @@ DomainSetting(
     Setting('setting_storage', 'host', '', 'text', 'Custom host', null, FLAG_HIDDEN | FLAG_DISABLED),
 );
 
-DomainUserSetting(
-    Setting('setting_info', 'displayName', '', 'text', 'Display Name'),
-    Setting('setting_storage', 'nAccept', 0, 'number', 'nAccept', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'nSubmit', 0, 'number', 'nSubmit', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'nLike', 0, 'number', 'nLike', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'rp', 0, 'number', 'RP', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'rpInfo', {}, 'json', 'RP Detail', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'rpdelta', 0, 'number', 'RP.delta', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'rank', 0, 'number', 'Rank', null, FLAG_DISABLED | FLAG_HIDDEN),
-    Setting('setting_storage', 'level', 0, 'number', 'level', null, FLAG_HIDDEN | FLAG_DISABLED),
-    Setting('setting_storage', 'join', 0, 'number', 'join', null, FLAG_HIDDEN | FLAG_DISABLED),
-);
+DomainUserSetting(Schema.object({
+    displayName: Schema.transform(String, (input) => saslPrep(input)).default('').description('Display Name').extra('family', 'setting_info'),
+
+    rpInfo: Schema.any().extra('family', 'setting_storage').disabled().hidden(),
+
+    ...Object.fromEntries(['nAccept', 'nSubmit', 'nLike', 'rp', 'rpdelta', 'rank', 'level', 'join'].map((i) => ([
+        i, Schema.number().default(0).extra('family', 'setting_storage').disabled().hidden(),
+    ]))),
+
+}));
 
 const ignoreUA = [
     'bingbot',
@@ -340,6 +346,7 @@ SystemSetting(
     Setting('setting_basic', 'discussion.nodes', builtin.DEFAULT_NODES, 'yaml', 'discussion.nodes', 'Discussion Nodes'),
     Setting('setting_basic', 'problem.categories', builtin.CATEGORIES, 'yaml', 'problem.categories', 'Problem Categories'),
     Setting('setting_basic', 'training.enrolled-users', true, 'boolean', 'training.enrolled-users', 'Show enrolled users for training'),
+    Setting('setting_basic', 'record.statMode', 'unique', 'text', 'record.statMode', 'Record stat mode'),
     Setting('setting_basic', 'pagination.problem', 100, 'number', 'pagination.problem', 'Problems per page'),
     Setting('setting_basic', 'pagination.contest', 20, 'number', 'pagination.contest', 'Contests per page'),
     Setting('setting_basic', 'pagination.discussion', 50, 'number', 'pagination.discussion', 'Discussions per page'),
@@ -350,51 +357,25 @@ SystemSetting(
     Setting('setting_basic', 'pagination.reply', 50, 'number', 'pagination.reply', 'Replies per page'),
     Setting('setting_basic', 'hydrooj.homepage', settingFile.homepage.default, 'yaml', 'hydrooj.homepage', 'Homepage config'),
     Setting('setting_basic', 'hydrooj.langs', settingFile.langs.default, 'yaml', 'hydrooj.langs', 'Language config'),
-    Setting('setting_session', 'session.keys', [String.random(32)], 'text', 'session.keys', 'session.keys', FLAG_HIDDEN),
+    Setting('setting_session', 'session.keys', [randomstring(32)], 'text', 'session.keys', 'session.keys', FLAG_HIDDEN),
     Setting('setting_session', 'session.domain', '', 'text', 'session.domain', 'session.domain', FLAG_HIDDEN),
     Setting('setting_session', 'session.saved_expire_seconds', 3600 * 24 * 30,
         'number', 'session.saved_expire_seconds', 'Saved session expire seconds'),
     Setting('setting_session', 'session.unsaved_expire_seconds', 3600 * 3,
         'number', 'session.unsaved_expire_seconds', 'Unsaved session expire seconds'),
     Setting('setting_storage', 'db.ver', 0, 'number', 'db.ver', 'Database version', FLAG_DISABLED | FLAG_HIDDEN),
-    Setting('setting_storage', 'installid', String.random(64), 'text', 'installid', 'Installation ID', FLAG_HIDDEN | FLAG_DISABLED),
+    Setting('setting_storage', 'installid', randomstring(64), 'text', 'installid', 'Installation ID', FLAG_HIDDEN | FLAG_DISABLED),
 );
 
 export const langs: Record<string, LangConfig> = {};
 
-declare module 'cordis' {
-    interface Context {
-        setting: SettingService;
-    }
-}
-
-const T = <F extends (...args: any[]) => any>(origFunc: F, disposeFunc?) =>
-    function method(this: cordis.Service, ...args: Parameters<F>) {
-        this.ctx.effect(() => {
-            const res = origFunc(...args);
-            return () => (disposeFunc ? disposeFunc(res) : res());
-        });
-    };
-
-export class SettingService extends Service {
-    PreferenceSetting = T(PreferenceSetting);
-    AccountSetting = T(AccountSetting);
-    DomainSetting = T(DomainSetting);
-    DomainUserSetting = T(DomainUserSetting);
-    SystemSetting = T(SystemSetting);
-    constructor(ctx: Context) {
-        super(ctx, 'setting');
-    }
-
-    get(key: string) {
-        return (this.ctx ? this.ctx.domain?.config?.[key.replace(/\./g, '$')] : null) ?? global.Hydro.model.system.get(key);
-    }
-}
-
 export const inject = ['db'];
 export async function apply(ctx: Context) {
-    ctx.plugin(SettingService);
     logger.info('Ensuring settings');
+    for (const lang in global.Hydro.locales) {
+        if (!global.Hydro.locales[lang].__interface) continue;
+        langRange[lang] = global.Hydro.locales[lang].__langname;
+    }
     const system = global.Hydro.model.system;
     for (const setting of SYSTEM_SETTINGS) {
         if (!setting.value) continue;
@@ -424,7 +405,6 @@ global.Hydro.model.setting = {
     apply,
     inject,
 
-    SettingService,
     Setting,
     PreferenceSetting,
     AccountSetting,

@@ -13,7 +13,7 @@ const locales = {
 };
 
 function MonacoContainer({
-  config, setValue, setError, monaco, schema, editorCallback, size,
+  config, setValue, setError, monaco, schema, editorCallback, size, dark,
 }) {
   const [editor, setEditor] = React.useState<any>(null);
   const [model, setModel] = React.useState<any>(null);
@@ -69,7 +69,7 @@ function MonacoContainer({
     const model = monaco.editor.createModel(config, 'yaml', monaco.Uri.parse('hydro://system/setting.yaml'));
     setModel(model);
     const e = monaco.editor.create(element, {
-      theme: 'vs-light',
+      theme: dark ? 'vs-dark' : 'vs-light',
       lineNumbers: 'off',
       glyphMargin: true,
       lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
@@ -91,7 +91,7 @@ function MonacoContainer({
     if (!editor) return;
     const current = editor.getValue({ lineEnding: '\n', preserveBOM: false });
     const diff = diffLines(current, config);
-    const ops: { range: any; text: string }[] = [];
+    const ops: { range: any, text: string }[] = [];
     let cursor = 1;
     for (const line of diff) {
       if (line.added) {
@@ -109,15 +109,11 @@ function MonacoContainer({
     }
     model.pushEditOperations([], ops, undefined);
   }, [editor, config]);
-  return (
-    <div ref={initializeEditor} style={{
-      width: '100%', height: '500px',
-    }} />
-  );
+  return <div ref={initializeEditor} style={{ width: '100%', height: '500px' }} />;
 }
 
 export default function ConfigEditor({
-  schema, config, monaco, Markdown, onSave, registerAction, sidebar,
+  schema, config, monaco, Markdown, onSave, registerAction, sidebar, dynamic,
 }) {
   const getValue = () => {
     try {
@@ -149,15 +145,31 @@ export default function ConfigEditor({
     setValue(yaml.load(v));
   }, [stringConfig]);
 
+  // FIXME: Otherwise first form change will be ignored
+  React.useEffect(() => {
+    setTimeout(() => {
+      updateFromMonaco(`${stringConfig}\n\ndummy: 1`);
+      setTimeout(() => {
+        setStringConfig(stringConfig);
+        setValue(yaml.load(stringConfig));
+      }, 300);
+    }, 300);
+  }, []);
+
   const [size, setSize] = React.useState([50, 50]);
 
-  return (<div className="fullscreen-content" style={{ backgroundColor: 'white', zIndex: 10 }}>
+  return (<div className="fullscreen-content" style={{ zIndex: 10 }}>
     <Allotment onChange={setSize}>
       <Allotment.Pane>
         <MonacoContainer
-          editorCallback={registerAction} schema={schema} monaco={monaco}
-          config={stringConfig} setValue={updateFromMonaco} setError={setInfo}
+          editorCallback={registerAction}
+          schema={schema}
+          monaco={monaco}
+          config={stringConfig}
+          setValue={updateFromMonaco}
+          setError={setInfo}
           size={size[0]}
+          dark={document.documentElement.className.includes('theme--dark')}
         />
         <pre className="help-text">{info}</pre>
         <button onClick={() => onSave(stringConfig)} className="rounded primary button">{i18n('Save All Changes')}</button>
@@ -166,7 +178,7 @@ export default function ConfigEditor({
         <div style={{
           overflowY: 'scroll', top: 0, bottom: 0, left: 0, right: 0, position: 'absolute', marginLeft: 10,
         }}>
-          <Form schema={schema} initial={initial} value={value} onChange={updateFromForm} />
+          <Form schema={schema} initial={initial} value={value} onChange={updateFromForm} dynamic={dynamic} />
         </div>
       </Allotment.Pane>
       {sidebar && <Allotment.Pane maxSize={220}>{sidebar}</Allotment.Pane>}

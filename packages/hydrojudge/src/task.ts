@@ -127,9 +127,14 @@ export class JudgeTask {
             if (filenames.length) {
                 logger.info(`Getting problem data: ${this.session?.config.host || 'local'}/${source}`);
                 this.next({ message: 'Syncing testdata, please wait...' });
-                await this.session.fetchFile(source, Object.fromEntries(files.map((i) => [i.name, join(filePath, i.name)])));
-                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
+                await this.session.fetchFile(source, Object.fromEntries(
+                    files.filter((i) => filenames.includes(i.name))
+                        .map((i) => [i.name, join(filePath, i.name)]),
+                ));
                 this.compileCache = {};
+            }
+            if (allFilesToRemove.length || filenames.length) {
+                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
             }
             await fs.writeFile(join(filePath, 'lastUsage'), Date.now().toString());
             return filePath;

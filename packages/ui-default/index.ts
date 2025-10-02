@@ -22,7 +22,7 @@ class WikiAboutHandler extends Handler {
   async get() {
     let raw = SystemModel.get('ui-default.about') || '';
     // TODO template engine
-    raw = raw.replace(/{{ name }}/g, this.domain.ui?.name || SystemModel.get('server.name')).trim();
+    raw = raw.replace(/\{\{ name \}\}/g, this.domain.ui?.name || SystemModel.get('server.name')).trim();
     const lines = raw.split('\n');
     const sections: { id: string, title: string, content: string }[] = [];
     for (const line of lines) {
@@ -76,7 +76,7 @@ class MarkdownHandler extends Handler {
 
 class SystemConfigSchemaHandler extends Handler {
   async get() {
-    const schema = convert(Schema.intersect(this.ctx.config.settings) as any, true);
+    const schema = convert(Schema.intersect(this.ctx.setting.settings) as any, true);
     this.response.body = schema;
   }
 }
@@ -131,6 +131,7 @@ class RichMediaHandler extends Handler {
   }
 }
 
+/* eslint-disable style/quote-props */
 const fontRange = {
   'Open Sans': 'Open Sans',
   'Seravek': 'Seravek',
@@ -181,8 +182,10 @@ export function apply(ctx: Context) {
         preload: Schema.string().default(''),
         domainNavigation: Schema.boolean().default(true).description('Show Domain Navigation'),
         about: Schema.string().role('markdown').default(defaultAbout),
+        enableScratchpad: Schema.boolean().default(true).description('Enable Scratchpad Mode'),
       }),
     }));
+    ctx.Route('config_schema', '/manage/config/schema.json', SystemConfigSchemaHandler, PRIV.PRIV_EDIT_SYSTEM);
   });
   if (process.env.HYDRO_CLI) return;
   ctx.Route('wiki_help', '/wiki/help', WikiHelpHandler);
@@ -190,7 +193,6 @@ export function apply(ctx: Context) {
   ctx.Route('set_theme', '/set_theme/:theme', SetThemeHandler);
   ctx.Route('set_legacy', '/legacy', LegacyModeHandler);
   ctx.Route('markdown', '/markdown', MarkdownHandler);
-  ctx.Route('config_schema', '/manage/config/schema.json', SystemConfigSchemaHandler, PRIV.PRIV_EDIT_SYSTEM);
   ctx.Route('media', '/media', RichMediaHandler);
   ctx.on('handler/after/DiscussionRaw', async (that) => {
     if (that.args.render && that.response.type === 'text/markdown') {

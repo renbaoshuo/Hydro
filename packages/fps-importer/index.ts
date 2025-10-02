@@ -4,7 +4,7 @@ import decodeHTML from 'decode-html';
 import xml2js from 'xml2js';
 import {
     _, BadRequestError, buildContent, Context, FileTooLargeError, fs, Handler, PERM, ProblemConfigFile,
-    ProblemModel, ProblemType, Schema, SolutionModel, SystemModel, ValidationError, yaml, Zip,
+    ProblemModel, ProblemType, randomstring, Schema, SolutionModel, SystemModel, ValidationError, yaml, Zip,
 } from 'hydrooj';
 
 const knownRemoteMapping = {
@@ -27,7 +27,7 @@ class FpsProblemImportHandler extends Handler {
                 samples: p.sample_input?.map((input, i) => [input, p.sample_output[i]]),
                 hint: p.hint?.[0],
                 source: p.source?.join(' '),
-            }, 'html', (s) => this.translate(s)).replace(/<math xm<x>lns=/g, '<math xmlns=').replace(/\[\/?md]/g, '');
+            }, 'html', (s) => this.translate(s)).replace(/<math xm<x>lns=/g, '<math xmlns=').replace(/\[\/?md\]/g, '');
             const config: ProblemConfigFile = {
                 time: p.time_limit[0]._ + p.time_limit[0].$.unit,
                 memory: p.memory_limit[0]._ + p.memory_limit[0].$.unit,
@@ -65,7 +65,7 @@ class FpsProblemImportHandler extends Handler {
             }
             if (p.img?.length) {
                 for (const img of p.img) {
-                    const filename = String.random(8) + img.src[0].split('/').pop().split('.').pop();
+                    const filename = randomstring(8) + img.src[0].split('/').pop().split('.').pop();
                     tasks.push(ProblemModel.addAdditionalFile(domainId, pid, filename, Buffer.from(img.base64[0], 'base64')));
                     content = content.replace(img.src[0], `file://${filename}`);
                 }
@@ -103,6 +103,7 @@ class FpsProblemImportHandler extends Handler {
             }
             for (const entry of entries) {
                 try {
+                    if (entry.directory === true) continue;
                     if (entry.uncompressedSize > SystemModel.get('import-fps.limit')) throw new FileTooLargeError();
                     const content = entry.getData(new Zip.TextWriter());
                     const result = await xml2js.parseStringPromise(content);

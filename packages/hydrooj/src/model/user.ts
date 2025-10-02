@@ -5,14 +5,14 @@ import { serializer } from '@hydrooj/framework';
 import { LoginError, UserAlreadyExistError, UserNotFoundError } from '../error';
 import {
     Authenticator, BaseUserDict, FileInfo, GDoc,
-    ownerInfo, Udict, Udoc, VUdoc,
+    OwnerInfo, Udict, Udoc, VUdoc,
 } from '../interface';
 import avatar from '../lib/avatar';
 import pwhash from '../lib/hash.hydro';
 import bus from '../service/bus';
 import db from '../service/db';
 import { Value } from '../typeutils';
-import { ArgMethod, buildProjection } from '../utils';
+import { ArgMethod, buildProjection, randomstring } from '../utils';
 import { PERM, PRIV } from './builtin';
 import domain from './domain';
 import * as setting from './setting';
@@ -125,9 +125,9 @@ export class User {
         return this;
     }
 
-    own<T extends ownerInfo>(doc: T, checkPerm: bigint): boolean;
-    own<T extends ownerInfo>(doc: T, exact: boolean): boolean;
-    own<T extends ownerInfo>(doc: T): boolean;
+    own<T extends OwnerInfo>(doc: T, checkPerm: bigint): boolean;
+    own<T extends OwnerInfo>(doc: T, exact: boolean): boolean;
+    own<T extends OwnerInfo>(doc: T): boolean;
     own<T extends { owner: number, maintainer?: number[] }>(doc: T): boolean;
     own(doc: any, arg1: any = false): boolean {
         if (typeof arg1 === 'bigint' && !this.hasPerm(arg1)) return false;
@@ -152,7 +152,7 @@ export class User {
             throw new LoginError(this.uname);
         }
         if (this.hashType !== 'hydro') {
-            // eslint-disable-next-line @typescript-eslint/no-use-before-define
+            // eslint-disable-next-line ts/no-use-before-define
             UserModel.setPassword(this._id, password);
         }
     }
@@ -171,7 +171,7 @@ export class User {
     serialize(h) {
         if (!this._isPrivate) {
             const fields = [...new Set(User._allowedFields)];
-            if (h?.user?.hasPerm(PERM.PERM_VIEW_DISPLAYNAME)) fields.push('displayName');
+            if (h?.user?.hasPerm(PERM.PERM_VIEW_DISPLAYNAME)) fields.push('displayName', 'school', 'studentId');
             return pick(this, fields);
         }
         return JSON.stringify(this, serializer(true, h));
@@ -198,6 +198,7 @@ async function initAndCache(udoc: Udoc, dudoc, scope: bigint = PERM.PERM_ALL) {
 
 class UserModel {
     static coll = coll;
+    static collGroup = collGroup;
     static User = User;
     static cache = cache;
     static defaultUser: Udoc = {
@@ -293,7 +294,7 @@ class UserModel {
 
     @ArgMethod
     static async setPassword(uid: number, password: string): Promise<Udoc> {
-        const salt = String.random();
+        const salt = randomstring();
         const res = await coll.findOneAndUpdate(
             { _id: uid },
             { $set: { salt, hash: await pwhash(password, salt), hashType: 'hydro' } },
@@ -304,13 +305,14 @@ class UserModel {
     }
 
     @ArgMethod
-    static async inc(_id: number, field: string, n: number = 1) {
-        if (_id < -999) return null;
-        const udoc = await coll.findOne({ _id });
-        if (!udoc) throw new UserNotFoundError(_id);
-        await coll.updateOne({ _id }, { $inc: { [field]: n } });
-        deleteUserCache(udoc);
-        return udoc;
+    static async inc(_id: number | number[], field: string, n: number = 1) {
+        const ids = (Array.isArray(_id) ? Array.from(new Set(_id)) : [_id]).filter((i) => i >= -999);
+        if (!ids.length) return null;
+        const udocs = await coll.find({ _id: { $in: ids } }).toArray();
+        if (udocs.length !== ids.length) throw new UserNotFoundError(_id);
+        await coll.updateMany({ _id: { $in: ids } }, { $inc: { [field]: n } });
+        for (const udoc of udocs) deleteUserCache(udoc);
+        return udocs;
     }
 
     @ArgMethod
@@ -324,7 +326,7 @@ class UserModel {
             uid = Math.max((udoc?._id || 0) + 1, 2);
             autoAlloc = true;
         }
-        const salt = String.random();
+        const salt = randomstring();
         while (true) {
             try {
                 // eslint-disable-next-line no-await-in-loop

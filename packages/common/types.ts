@@ -36,6 +36,8 @@ export interface SubtaskConfig {
     cases?: TestCaseConfig[];
 }
 
+export type DetailType = 'full' | 'case' | 'none';
+
 export interface ProblemConfigFile {
     type?: ProblemType;
     subType?: string;
@@ -48,7 +50,7 @@ export interface ProblemConfigFile {
     num_processes?: number;
     user_extra_files?: string[];
     judge_extra_files?: string[];
-    detail?: boolean;
+    detail?: DetailType | boolean;
     answers?: Record<string, [string | string[], number]>;
     redirect?: string;
     cases?: TestCaseConfig[];
@@ -64,13 +66,13 @@ export interface ProblemConfigFile {
 
 export interface FileInfo {
     /** storage path */
-    _id: string,
+    _id: string;
     /** filename */
-    name: string,
+    name: string;
     /** file size (in bytes) */
-    size: number,
-    etag: string,
-    lastModified: Date,
+    size: number;
+    etag: string;
+    lastModified: Date;
 }
 
 export interface JudgeMeta {
@@ -111,7 +113,7 @@ export interface RecordPayload extends RecordJudgeInfo {
     /** 0 if pretest&script */
     contest?: string;
 
-    files?: Record<string, string>
+    files?: Record<string, string>;
 }
 
 export interface JudgeRequest extends Omit<RecordPayload, 'testCases'> {

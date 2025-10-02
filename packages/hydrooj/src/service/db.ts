@@ -14,16 +14,16 @@ const logger = new Logger('mongo');
 export interface Collections { }
 
 interface MongoConfig {
-    protocol?: string,
-    username?: string,
-    password?: string,
-    host?: string,
-    port?: string,
-    name?: string,
-    url?: string,
-    uri?: string,
-    prefix?: string,
-    collectionMap?: Record<string, string>,
+    protocol?: string;
+    username?: string;
+    password?: string;
+    host?: string;
+    port?: string;
+    name?: string;
+    url?: string;
+    uri?: string;
+    prefix?: string;
+    collectionMap?: Record<string, string>;
 }
 
 declare module '../context' {
@@ -59,7 +59,7 @@ export class MongoService extends Service {
         const mongourl = await MongoService.getUrl();
         const url = mongoUri.parse(mongourl);
         this.client = await MongoClient.connect(mongourl);
-        yield () => { this.client.close(); };
+        yield () => this.client.close();
         this.db = this.client.db(url.database || 'hydro');
         await bus.parallel('database/connect', this.db);
         yield this.ctx.interval(() => this.fixExpireAfter(), Time.hour);

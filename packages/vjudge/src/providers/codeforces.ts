@@ -3,7 +3,7 @@ import { PassThrough } from 'stream';
 import yaml from 'js-yaml';
 import { JSDOM } from 'jsdom';
 import {
-    buildContent, Logger, sleep, STATUS,
+    buildContent, Logger, randomstring, sleep, STATUS,
 } from 'hydrooj';
 import { BasicFetcher } from '../fetch';
 import { IBasicProvider, RemoteAccount } from '../interface';
@@ -186,13 +186,13 @@ export default class CodeforcesProvider extends BasicFetcher implements IBasicPr
             if (!src.startsWith('http')) continue;
             const file = new PassThrough();
             this.get(src).pipe(file);
-            const fid = String.random(8);
+            const fid = randomstring(8);
             files[`${fid}.png`] = file;
             ele.setAttribute('src', `file://${fid}.png`);
         }
         const title = document.querySelector('.title').innerHTML.trim().split('. ')[1];
-        const time = parseInt(document.querySelector('.time-limit').innerHTML.substr(53, 2), 10);
-        const memory = parseInt(document.querySelector('.memory-limit').innerHTML.substr(55, 4), 10);
+        const time = Number.parseInt(document.querySelector('.time-limit').innerHTML.substr(53, 2), 10);
+        const memory = Number.parseInt(document.querySelector('.memory-limit').innerHTML.substr(55, 4), 10);
         document.body.firstChild.remove();
         document.querySelector('.input-specification')?.firstChild.remove();
         document.querySelector('.output-specification')?.firstChild.remove();

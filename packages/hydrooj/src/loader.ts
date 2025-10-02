@@ -1,4 +1,3 @@
-/* eslint-disable import/no-dynamic-require */
 /* eslint-disable consistent-return */
 /* eslint-disable simple-import-sort/imports */
 import './init';
@@ -50,7 +49,7 @@ export class Loader extends Service {
     public cache: Record<string, string> = Object.create(null);
     // public warnings: Record<string, string> = Object.create(null);
 
-    static inject = ['config', 'timer', 'i18n', 'logger'];
+    static inject = ['setting', 'timer', 'i18n', 'logger'];
 
     constructor(ctx: Context) {
         super(ctx, 'loader');
@@ -100,8 +99,8 @@ export class Loader extends Service {
         const schemaRequest = configScope ? Schema.object({
             [configScope]: schema,
         }) : schema;
-        await this.ctx.config._tryMigrateConfig(schemaRequest);
-        const res = this.ctx.config.requestConfig(schemaRequest);
+        await this.ctx.setting._tryMigrateConfig(schemaRequest);
+        const res = this.ctx.setting.requestConfig(schemaRequest);
         return configScope ? res[configScope] : res;
     }
 
@@ -181,7 +180,7 @@ export async function load() {
         if (process.env.DEV) {
             const q = await simpleGit().listRemote(['--get-url']);
             if (!q.includes('hydro-dev/Hydro')) {
-                console.warn('\x1b[93m');
+                console.warn('\x1B[93m');
                 console.warn('DISCLAIMER:');
                 console.warn(' You are under development mode.');
                 console.warn(' The Hydro project is licensed under AGPL3,');
@@ -195,7 +194,7 @@ export async function load() {
                 console.warn(' 这意味着除非你获得了原作者的其他授权，');
                 console.warn(' 你需要同样以 AGPL3 协议开源所有的修改，');
                 console.warn(' 并保留所有的版权声明。');
-                console.warn('\x1b[39m');
+                console.warn('\x1B[39m');
                 console.log('');
                 console.log('Hydro will start in 5s.');
                 console.log('Hydro 将在五秒后继续启动。');

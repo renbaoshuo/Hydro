@@ -3,8 +3,10 @@ __langname: 简体中文
 '[Richtext message]': '[富文本消息]'
 '{0} comments': '{0} 条评论'
 '{0} discussions': '{0} 条讨论'
-'{0} is a moderator of this domain.': '{}是这个域的管理者之一。'
+'{0} is a moderator of this domain.': '{0}是这个域的管理者之一。'
+'{0} is a superuser.': '{0}是超级管理员。'
 '{0} limit exceeded (limit: {2} operations in {1} seconds).': '{0} 超过频率限制。限制：{1} 秒内最多 {2} 次操作。'
+'{0} problem(s) selected': '{0} 道题目已选中'
 '{0} problems': '{0} 道题'
 '{0} sections': '{0} 小节'
 '{0} solutions': '{0} 条题解'
@@ -187,6 +189,7 @@ Completed: 已完成
 Config: 配置
 Confirm deleting the selected roles?: 您确定删除所选角色吗？
 Confirm deleting this comment? Its replies will be deleted as well.: 确认删除这个评论吗？回复会被同时删除。
+Confirm deleting this domain? This action cannot be undone.: '确认删除此域？此操作无法撤销。'
 Confirm deleting this reply?: 确认删除这个回复吗？
 Confirm rejudge this problem?: 确定要重测这道题吗？
 Confirm removing the selected users?: 您确定将所选用户移除吗？
@@ -221,6 +224,7 @@ Copy Selected: 复制选中
 Copy WeChat Account: 复制微信号
 Copy: 复制
 Copyright Complaint: 版权申诉
+Correction: 补题
 CPU Info: CPU信息
 Create a contest: 创建一个比赛
 Create a Discussion: 创建一个讨论
@@ -429,7 +433,7 @@ Highlight: 高亮
 Hint: 提示
 Hint::icon::difficulty: Hydro 中题目的难度，根据递交数、通过率以及每个递交的递交时间和评测结果，综合计算得出，可能不准确。
 Hint::icon::switch_account: 作为超级管理员，您可以直接切换到其他人的账户。
-Hint::icon::testdata: <a href="https://hydro.js.org/docs/user/testdata/" target="_blank">请参照文档说明</a>
+Hint::icon::testdata: <a href="https://hydro.js.org/docs/Hydro/user/testdata" target="_blank">请参照文档说明</a>
 Hint::page::main: 欢迎来到 Hydro！ 您可在右上角注册或登录。此类提示仅会显示一次。
 Hint::page::problem_detail: 这是题目详情页面。您可点击右侧“进入在线编程模式"开始编写您的代码。
 Hint::page::problem_files: 您可以将文件或压缩包拖拽至对应区域来上传文件。点击文件名在线编辑或按住 Ctrl 后点击文件名下载单个文件。
@@ -540,7 +544,7 @@ Logout All Sessions: 注销所有会话
 Logout This Session: 注销该会话
 Logout: 登出
 Lost Password: 忘记密码
-Lucky: 手气不错
+Lucky: 试试手气
 manage_config: 配置管理
 manage_dashboard: 控制面板
 manage_join_applications: 加域申请
@@ -685,6 +689,7 @@ Pretest Data: 自测数据
 Pretest Your Code: 使用自定义数据测试
 Pretest: 自测
 Pretest?: 自测?
+Print New File: 打印新文件
 Privacy: 隐私
 Privilege: 权限
 Problem {1} not found.: 题目 {1} 不存在。
@@ -692,6 +697,7 @@ Problem Category: 标签
 Problem Data: 题目数据
 Problem ID cannot be a pure number. Leave blank if you want to use numberic id.: 题目ID不能为纯数字。 若要自动分配数字ID请将此处留空。
 Problem ID List: 题目 ID 列表
+Problem List: 题目列表
 Problem Set: 题库
 Problem Settings: 题目设置
 Problem Solution List: 题解列表
@@ -817,7 +823,9 @@ Section: 章节
 Security: 安全
 Select a node to create discussion.: 选择一个节点来发表讨论。
 Select a role: 选择一个角色
+Select All: 全选
 Select Category: 选择标签
+Select None: 全不选
 Select User: 选择用户
 Selected categories: 已选标签
 Selected files have been deleted.: 所选文件已被删除。
@@ -880,6 +888,7 @@ Start at: 开始于
 Statistics: 统计
 Status is hidden: 状态已隐藏
 Status: 状态
+Submission language limit: 提交语言限制
 Submission Statistics: 递交统计
 Submission: 递交
 Submissions: 递交
@@ -911,6 +920,7 @@ Testdata: 测试数据
 Text: 文本
 The 'default' role applies to ALL REGISTERED USER.: default 角色作用于<b>所有已注册用户</b>
 The contest is a flexible time contest. You need to complete the contest within a specified time after you attended.: 本场比赛采用灵活时间模式，你需要在参加后的指定时间内完成比赛。
+The contest is ended. New submissions will be treated as correction submissions and will not be counted in the contest.: 比赛已经结束。新提交将被视为补题提交，不计入比赛成绩。
 The group to join when user joining the domain.: 加入域时自动加入的小组。
 The homework's deadline is due but in extension. You can still submit for this problem but your score will be penalized.: 作业已超过截止时间，但仍在延期时间内。您递交题目将无法获得全部分数。
 The invitation code to enter to successfully join the domain. You can only use letters and numbers in the code and it should not be longer than 64 characters.: 加入此域的邀请码。您只能使用字母和数字，并且不能长于 64 个字符。
@@ -1005,6 +1015,8 @@ user_detail: 用户
 user_extra_files: 用户额外文件
 user_login: 登录
 user_logout: 登出
+user_lostpass_mail_sent: 密码重置邮件已发送
+user_lostpass_with_code: 重置密码
 user_lostpass: 忘记密码
 user_register_with_code: 注册
 user_register: 注册

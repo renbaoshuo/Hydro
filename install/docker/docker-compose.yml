@@ -1,27 +1,38 @@
-version: '3.7'
-
 services:
-    
   # Warning: mongodb here is not password-protected.
   # DO NOT EXPOSE THIS SERVICE TO THE PUBLIC.
   oj-mongo:
-    image: mongo
+    image: mongo:7-jammy
     container_name: oj-mongo
     restart: always
     volumes:
       - ./data/mongo:/data/db
-
+    healthcheck:
+      test: mongosh --eval "db.adminCommand('ping')"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
   oj-backend:
     build: ./backend
     container_name: oj-backend
     restart: always
     depends_on:
-      - oj-mongo
+      oj-mongo:
+        condition: service_healthy
+        restart: true
     volumes:
       - ./data/file:/data/file
       - ./data/backend:/root/.hydro
     ports:
-      - "0.0.0.0:80:8888" # In docker mode, change THIS port instead of port in system settings!
+      - "80:8888" # In docker mode, change THIS port instead of port in system settings!
+    healthcheck:
+      test: curl --silent --fail http://localhost:8888/status >/dev/null || exit 1
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
 
   oj-judge:
     build: ./judge
@@ -29,6 +40,9 @@ services:
     restart: always
     privileged: true
     depends_on:
-      - oj-backend
+      oj-backend:
+        condition: service_healthy
+        restart: true
     volumes:
-      - ./data/judge:/root/.config/hydro
+      - ./judge/judge.yaml:/root/.hydro/judge.yaml
+      - ./judge/mount.yaml:/root/.hydro/mount.yaml

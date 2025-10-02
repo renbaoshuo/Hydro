@@ -28,7 +28,7 @@ const ignoredLimit = `,${argv.options.ignoredLimit},`;
 const logger = new Logger('server');
 
 declare module '@hydrooj/framework' {
-    export interface HandlerCommon<C> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    export interface HandlerCommon<C> { // eslint-disable-line ts/no-unused-vars
         domain: DomainDoc;
 
         paginate<T>(cursor: FindCursor<T>, page: number, key: string): Promise<[docs: T[], numPages: number, count: number]>;
@@ -39,9 +39,9 @@ declare module '@hydrooj/framework' {
     }
 }
 
+export { Mutation, Query } from '@hydrooj/framework/api';
 export * from '@hydrooj/framework/decorators';
 export * from '@hydrooj/framework/validator';
-export { Query, Mutation } from '@hydrooj/framework/api';
 
 /*
  * For security concern, some API requires sudo privilege to access.
@@ -92,7 +92,7 @@ export async function apply(ctx: Context) {
         xhost: system.get('server.xhost'),
     });
     if (process.env.HYDRO_CLI) return;
-    ctx.inject(['server', 'oauth', 'setting'], (childContext) => {
+    await ctx.inject(['server', 'oauth', 'setting'], (childContext) => {
         const { server, on, oauth } = childContext;
         server.addHandlerLayer('init', async (c, next) => {
             const init = Date.now();
@@ -154,7 +154,7 @@ export async function apply(ctx: Context) {
                             ? (!host.includes(this.request.host))
                             : this.request.host !== host)
                     )) withDomainId ||= domainId;
-                    res = server.router.url.call(server.router, name, args, { query }).toString();
+                    res = server.router.url(name, args, { query }).toString();
                     if (anchor) res = `${res}#${anchor}`;
                     if (withDomainId) res = `/d/${withDomainId}${res}`;
                 } catch (e) {
@@ -196,7 +196,7 @@ export async function apply(ctx: Context) {
                 if (overrideLimit) maxOperations = overrideLimit;
                 // deprecated: remove boolean support in future
                 if (typeof defaultKey === 'boolean') defaultKey = defaultKey ? '{{user}}' : '{{ip}}';
-                const id = defaultKey.replace('{{ip}}', this.request.ip).replace('{{user}}', this.user._id);
+                const id = defaultKey.replace('{{ip}}', this.request.ip).replace('{{user}}', this.user?._id?.toString() || '0');
                 await opcount.inc(op, id, periodSecs, maxOperations);
             },
             renderTitle(str: string) {
@@ -272,7 +272,7 @@ export async function apply(ctx: Context) {
                     text: v.text,
                     name: v.name,
                 }));
-            if (!h.noCheckPermView && !h.user.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) h.checkPerm(PERM.PERM_VIEW);
+            if ((!('noCheckPermView' in h) || !h.noCheckPermView) && !h.user.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) h.checkPerm(PERM.PERM_VIEW);
             if (h.context.pendingError) throw h.context.pendingError;
         });
         on('handler/create/ws', async (h) => {

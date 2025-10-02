@@ -1,12 +1,14 @@
 import { sumBy } from 'lodash';
 import { Filter, ObjectId } from 'mongodb';
-import { Counter, formatSeconds, Time } from '@hydrooj/utils/lib/utils';
+import {
+    Counter, formatSeconds, getAlphabeticId, Time,
+} from '@hydrooj/utils/lib/utils';
 import {
     ContestAlreadyAttendedError, ContestNotFoundError,
     ContestScoreboardHiddenError, ValidationError,
 } from '../error';
 import {
-    BaseUserDict, ContestRule, ContestRules, ProblemDict, RecordDoc,
+    BaseUserDict, ContestPrintDoc, ContestRule, ContestRules, ProblemDict, RecordDoc,
     ScoreboardConfig, ScoreboardNode, ScoreboardRow, SubtaskResult, Tdoc,
 } from '../interface';
 import bus from '../service/bus';
@@ -17,6 +19,13 @@ import { PERM, STATUS, STATUS_SHORT_TEXTS } from './builtin';
 import * as document from './document';
 import problem from './problem';
 import user, { User } from './user';
+
+export enum PrintTaskStatus {
+    pending = 'pending',
+    printing = 'printing',
+    printed = 'printed',
+    failed = 'failed',
+}
 
 interface AcmJournal {
     rid: ObjectId;
@@ -158,7 +167,7 @@ const acm = buildContestRule({
             } else {
                 columns.push({
                     type: 'problem',
-                    value: String.fromCharCode(65 + i - 1),
+                    value: getAlphabeticId(i - 1),
                     raw: pid,
                 });
             }
@@ -324,7 +333,7 @@ const oi = buildContestRule({
             } else {
                 columns.push({
                     type: 'problem',
-                    value: String.fromCharCode(65 + i - 1),
+                    value: getAlphabeticId(i - 1),
                     raw: tdoc.pids[i - 1],
                 });
             }
@@ -358,6 +367,7 @@ const oi = buildContestRule({
             }
         }
         const tsddict = ((config.lockAt && isLocked(tdoc, new Date())) ? tsdoc.display : tsdoc.detail) || {};
+        const useRelativeTime = !!tdoc.duration;
         for (const pid of tdoc.pids) {
             const index = `${tsdoc.uid}/${tdoc.domainId}/${pid}`;
 
@@ -385,7 +395,8 @@ const oi = buildContestRule({
                     score: tsddict[pid]?.score,
                 };
             if (tsddict[pid]?.status === STATUS.STATUS_ACCEPTED) {
-                if (tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]) {
+                const startAt = (useRelativeTime ? tsdoc.startAt || tdoc.beginAt : tdoc.beginAt).getTime();
+                if (tsddict[pid].rid.getTimestamp().getTime() - startAt === meta?.first?.[pid]) {
                     node.style = 'background-color: rgb(217, 240, 199);';
                 }
             }
@@ -399,10 +410,11 @@ const oi = buildContestRule({
         const udict = await user.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
         const psdict = {};
         const first = {};
+        const useRelativeTime = !!tdoc.duration;
         for (const [, tsdoc] of rankedTsdocs) {
             for (const [pid, detail] of Object.entries(tsdoc.detail || {})) {
                 if (detail.status !== STATUS.STATUS_ACCEPTED) continue;
-                const time = detail.rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime();
+                const time = detail.rid.getTimestamp().getTime() - (useRelativeTime ? tsdoc.startAt || tdoc.beginAt : tdoc.beginAt).getTime();
                 if (!first[pid] || first[pid] > time) first[pid] = time;
             }
         }
@@ -502,17 +514,35 @@ const strictioi = buildContestRule({
             }
         }
         for (const pid of tdoc.pids) {
-            row.push({
-                type: 'record',
-                value: ((tsddict[pid]?.score || 0) * ((tdoc.score?.[pid] || 100) / 100)).toString() || '',
-                hover: Object.values(tsddict[pid]?.subtasks || {}).map((i: SubtaskResult) => `${STATUS_SHORT_TEXTS[i.status]} ${i.score}`).join(','),
-                raw: tsddict[pid]?.rid,
-                score: tsddict[pid]?.score,
-                style: tsddict[pid]?.status === STATUS.STATUS_ACCEPTED
-                    && tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]
-                    ? 'background-color: rgb(217, 240, 199);'
-                    : undefined,
-            });
+            const index = `${tsdoc.uid}/${tdoc.domainId}/${pid}`;
+            const n: ScoreboardNode = (!config.isExport && !config.lockAt && isDone(tdoc)
+                && meta?.psdict?.[index]?.rid
+                && tsddict[pid]?.rid?.toHexString() !== meta?.psdict?.[index]?.rid?.toHexString()
+                && meta?.psdict?.[index]?.rid?.getTimestamp() > tdoc.endAt)
+                ? {
+                    type: 'records',
+                    value: '',
+                    raw: [{
+                        value: ((tsddict[pid]?.score || 0) * ((tdoc.score?.[pid] || 100) / 100)).toString() || '',
+                        raw: tsddict[pid]?.rid || null,
+                        score: tsddict[pid]?.score,
+                    }, {
+                        value: ((meta?.psdict?.[index]?.score || 0) * ((tdoc.score?.[pid] || 100) / 100)).toString() || '',
+                        raw: meta?.psdict?.[index]?.rid ?? null,
+                        score: meta?.psdict?.[index]?.score,
+                    }],
+                } : {
+                    type: 'record',
+                    value: ((tsddict[pid]?.score || 0) * ((tdoc.score?.[pid] || 100) / 100)).toString() || '',
+                    raw: tsddict[pid]?.rid,
+                    score: tsddict[pid]?.score,
+                };
+            n.hover = Object.values(tsddict[pid]?.subtasks || {}).map((i: SubtaskResult) => `${STATUS_SHORT_TEXTS[i.status]} ${i.score}`).join(',');
+            if (tsddict[pid]?.status === STATUS.STATUS_ACCEPTED
+                && tsddict[pid].rid.getTimestamp().getTime() - (tsdoc.startAt || tdoc.beginAt).getTime() === meta?.first?.[pid]) {
+                n.style = 'background-color: rgb(217, 240, 199);';
+            }
+            row.push(n);
         }
         return row;
     },
@@ -621,7 +651,7 @@ const homework = buildContestRule({
             );
             if (exceedSeconds < 0) return rate * jdoc.score;
             let coefficient = 1;
-            const keys = Object.keys(tdoc.penaltyRules).map(parseFloat).sort((a, b) => a - b);
+            const keys = Object.keys(tdoc.penaltyRules).map(Number.parseFloat).sort((a, b) => a - b);
             for (const i of keys) {
                 if (i * 3600 <= exceedSeconds) coefficient = tdoc.penaltyRules[i];
                 else break;
@@ -681,7 +711,7 @@ const homework = buildContestRule({
             } else {
                 columns.push({
                     type: 'problem',
-                    value: String.fromCharCode(65 + i - 1),
+                    value: getAlphabeticId(i - 1),
                     raw: pid,
                 });
             }
@@ -1027,8 +1057,41 @@ export const statusText = (tdoc: Tdoc, tsdoc?: any) => (
                 ? 'Live...'
                 : 'Done');
 
+export function addPrintTask(domainId: string, tid: ObjectId, uid: number, name: string, content: string) {
+    return document.add(domainId, content, uid, document.TYPE_CONTEST_PRINT, null, document.TYPE_CONTEST, tid, {
+        title: name,
+        status: PrintTaskStatus.pending,
+    });
+}
+
+export async function updatePrintTask(domainId: string, tid: ObjectId, taskId: ObjectId, $set: Partial<ContestPrintDoc>) {
+    const res = await document.coll.updateOne({
+        domainId, docType: document.TYPE_CONTEST_PRINT,
+        docId: taskId, parentType: document.TYPE_CONTEST, parentId: tid,
+    }, { $set });
+    return !!res.modifiedCount;
+}
+
+export function allocatePrintTask(domainId: string, tid: ObjectId) {
+    return document.coll.findOneAndUpdate({
+        domainId, docType: document.TYPE_CONTEST_PRINT,
+        parentType: document.TYPE_CONTEST, parentId: tid,
+        status: PrintTaskStatus.pending,
+    }, {
+        $set: {
+            status: PrintTaskStatus.printing,
+        },
+    }, { returnDocument: 'after' });
+}
+
+export function getMultiPrintTask(domainId: string, tid: ObjectId, query = {}) {
+    return document.getMulti(domainId, document.TYPE_CONTEST_PRINT, { parentType: document.TYPE_CONTEST, parentId: tid, ...query })
+        .sort({ _id: 1 });
+}
+
 global.Hydro.model.contest = {
     RULES,
+    PrintTaskStatus,
     buildContestRule,
     add,
     getListStatus,
@@ -1069,4 +1132,8 @@ global.Hydro.model.contest = {
     isExtended,
     applyProjection,
     statusText,
+    addPrintTask,
+    updatePrintTask,
+    allocatePrintTask,
+    getMultiPrintTask,
 };

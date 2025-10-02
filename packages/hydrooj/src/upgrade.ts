@@ -1,12 +1,10 @@
 /* eslint-disable consistent-return */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable ts/no-unused-vars */
 /* eslint-disable no-await-in-loop */
-/* eslint-disable @typescript-eslint/naming-convention */
+/* eslint-disable ts/naming-convention */
 import yaml from 'js-yaml';
-import { pick } from 'lodash';
-import moment from 'moment-timezone';
 import { ObjectId } from 'mongodb';
-import { sleep } from '@hydrooj/utils';
+import { randomstring, sleep } from '@hydrooj/utils';
 import { buildContent } from './lib/content';
 import { Logger } from './logger';
 import { PERM, PRIV, STATUS } from './model/builtin';
@@ -42,10 +40,10 @@ export const coreScripts: MigrationScript[] = [
     // Mark as used
     async function init() {
         if (!await user.getById('system', 0)) {
-            await user.create('Guest@hydro.local', 'Guest', String.random(32), 0, '127.0.0.1', PRIV.PRIV_REGISTER_USER);
+            await user.create('Guest@hydro.local', 'Guest', randomstring(32), 0, '127.0.0.1', PRIV.PRIV_REGISTER_USER);
         }
         if (!await user.getById('system', 1)) {
-            await user.create('Hydro@hydro.local', 'Hydro', String.random(32), 1, '127.0.0.1', PRIV.PRIV_USER_PROFILE);
+            await user.create('Hydro@hydro.local', 'Hydro', randomstring(32), 1, '127.0.0.1', PRIV.PRIV_USER_PROFILE);
         }
         const ddoc = await domain.get('system');
         if (!ddoc) await domain.add('system', 1, 'Hydro', 'Welcome to Hydro!');
@@ -53,7 +51,7 @@ export const coreScripts: MigrationScript[] = [
         return true;
     },
     // Init
-    ...new Array(47).fill(unsupportedUpgrade), // oxlint-disable-line no-new-array
+    ...Array.from({ length: 47 }).fill(unsupportedUpgrade) as any,
     async function _48_49() {
         await RecordModel.coll.updateMany({ input: { $exists: true } }, { $set: { contest: new ObjectId('000000000000000000000000') } });
         return true;
@@ -223,7 +221,7 @@ export const coreScripts: MigrationScript[] = [
                         config.answers[cnt] = l;
                     }
 
-                    function processSingleLanguage(content: string) { // eslint-disable-line no-inner-declarations
+                    function processSingleLanguage(content: string) {
                         let text = '';
                         try {
                             let scnt = 0;
@@ -290,7 +288,7 @@ export const coreScripts: MigrationScript[] = [
             'file.pathStyle', 'file.endPointForUser', 'file.endPointForJudge',
         ] as any[]) as any;
         if ((endPoint && accessKey) || process.env.MINIO_ACCESS_KEY) {
-            await app.get('config').setConfig('file', {
+            await app.get('setting').setConfig('file', {
                 type: 's3',
                 endPoint: process.env.MINIO_ACCESS_KEY ? 'http://127.0.0.1:9000/' : endPoint,
                 accessKey: process.env.MINIO_ACCESS_KEY || accessKey,
@@ -613,6 +611,10 @@ export const coreScripts: MigrationScript[] = [
             }
             if (op.length) await op.execute();
         });
+        return true;
+    },
+    async function _94_95() {
+        await discussion.coll.deleteMany({ content: { $not: { $type: 'string' } } });
         return true;
     },
 ];

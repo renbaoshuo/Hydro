@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import charset from 'superagent-charset';
 import proxy from 'superagent-proxy';
 import {
-    htmlEncode, Logger, parseMemoryMB, parseTimeMS, sleep, STATUS, superagent,
+    htmlEncode, Logger, parseMemoryMB, parseTimeMS, randomstring, sleep, STATUS, superagent,
 } from 'hydrooj';
 import { BasicFetcher } from '../fetch';
 import { IBasicProvider, RemoteAccount } from '../interface';
@@ -67,7 +67,7 @@ export default class HDUOJProvider extends BasicFetcher implements IBasicProvide
             }
             const file = new PassThrough();
             this.get(src).pipe(file);
-            const fid = String.random(8);
+            const fid = randomstring(8);
             images[src] = fid;
             files[`${fid}.png`] = file;
             ele.setAttribute('src', `file://${fid}.png`);
@@ -146,7 +146,7 @@ export default class HDUOJProvider extends BasicFetcher implements IBasicProvide
         return res;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // eslint-disable-next-line ts/no-unused-vars
     async submitProblem(id: string, lang: string, code: string, info) {
         await this.ensureLogin();
         const language = lang.includes('hduoj.') ? lang.split('hduoj.')[1] : '0';
@@ -163,7 +163,7 @@ export default class HDUOJProvider extends BasicFetcher implements IBasicProvide
             throw new Error(text.split('<li>')[1].split('</li>')[0]);
         }
         // eslint-disable-next-line max-len
-        const { text: status } = await this.get(`/status.php?first=&pid=${id}&user=${this.account.handle}&lang=${parseInt(language, 10) + 1}&status=0`);
+        const { text: status } = await this.get(`/status.php?first=&pid=${id}&user=${this.account.handle}&lang=${Number.parseInt(language, 10) + 1}&status=0`);
         const $dom = new JSDOM(status);
         const res = $dom.window.document.querySelector('.table_text>tbody');
         return res.children[2].children[0].innerHTML;

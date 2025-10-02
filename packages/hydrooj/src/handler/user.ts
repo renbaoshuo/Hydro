@@ -3,6 +3,7 @@ import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import moment from 'moment-timezone';
 import { Binary } from 'mongodb';
 import Schema from 'schemastery';
+import { randomstring } from '@hydrooj/utils';
 import type { Context } from '../context';
 import {
     AuthOperationError, BadRequestError, BlacklistedError, BuiltinLoginError,
@@ -306,7 +307,7 @@ class UserRegisterWithCodeHandler extends Handler {
         if (provider.lockUsername) uname = this.tdoc.identity.username;
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
         if (password !== verify) throw new VerifyPasswordError();
-        const randomEmail = `${String.random(12)}@invalid.local`; // some random email to remove in the future
+        const randomEmail = `${randomstring(12)}@invalid.local`; // some random email to remove in the future
         const uid = await user.create(this.tdoc.mail || randomEmail, uname, password, undefined, this.request.ip);
         await token.del(code, token.TYPE_REGISTRATION);
         const [id, mailDomain] = this.tdoc.mail.split('@');
@@ -599,7 +600,7 @@ declare module '@hydrooj/framework' {
 
 export async function apply(ctx: Context) {
     ctx.Route('user_login', '/login', UserLoginHandler);
-    ctx.Route('user_oauth', '/oauth/:type', OauthHandler);
+    ctx.Route('user_oauth', '/oauth/:type/login', OauthHandler);
     ctx.Route('user_sudo', '/user/sudo', UserSudoHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route('user_tfa', '/user/tfa', UserTFAHandler);
     ctx.Route('user_webauthn', '/user/webauthn', UserWebauthnHandler);
@@ -625,7 +626,7 @@ export async function apply(ctx: Context) {
             throw new NotFoundError();
         },
     });
-    ctx.inject(['api'], ({ api }) => {
+    await ctx.inject(['api'], ({ api }) => {
         api.provide(UserApi);
     });
 }

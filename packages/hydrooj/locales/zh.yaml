@@ -3,7 +3,7 @@ __id: zh
 __interface: yes
 __langname: 简体中文
 '"{data}" copied to clipboard!': “{data}”已复制到剪贴板！
-'{0} {1} delete your discussion reply {2} in "{3}"({4}).' : '{0} {1} 从讨论 {3}({4}) 删除了你的回复 {2}。'
+'{0} {1} delete your discussion reply {2} in "{3}"({4}).': '{0} {1} 从讨论 {3}({4}) 删除了你的回复 {2}。'
 '{0} comments': '{0} 条评论'
 '{0} discussions': '{0} 条讨论'
 '{0} is a moderator of this domain.': '{}是这个域的管理者之一。'
@@ -32,13 +32,13 @@ __langname: 简体中文
 'Join {0}': '加入 {0}'
 'No': 否
 'Note: Problem title may not be hidden.': 注意：题目标题可能不会被隐藏。
+'Or upload a file:': 或者上传一个文件：
 'Original score: {0}': '原得分: {0}'
 'Role {1} already exists in domain {0}.': '域 {0} 中已存在角色 {1}。'
 'Solved {0} problems, RP: {1} (No. {2})': '解决了 {0} 道题目，RP: {1} (No. {2})'
 'The value `{1}` of {0} already exists.': '{0} 的值 `{1}` 已经存在。'
 'Yes': 是
 "Effects only when Difficulty is not 'Use algorithm calculated'.": 仅当难度不为“使用算法计算”时才起效。
-"Or upload a file:": 或者上传一个文件：
 "Split by ',' '.'": 由“, ”或“，”分隔。
 "What's file?": 什么是文件？
 (All Problems): (所有题目)
@@ -64,8 +64,8 @@ Add new data: 添加新数据
 Add User: 添加用户
 Add: 添加
 Additional File: 附加文件
-Admin {0} delete your discussion "{1}". : 管理员 {0} 删除了你的讨论 "{1}"。
-Admin {0} delete your discussion tail reply {1} in "{2}"({3}). : 管理员 {0} 从讨论 {2}({3}) 中删除了你的楼中楼回复 {1}。
+Admin {0} delete your discussion "{1}".: 管理员 {0} 删除了你的讨论 "{1}"。
+Admin {0} delete your discussion tail reply {1} in "{2}"({3}).: 管理员 {0} 从讨论 {2}({3}) 中删除了你的楼中楼回复 {1}。
 All {0} Contests: 所有 {0} 比赛
 All Contests: 所有比赛
 All Homeworks: 所有作业
@@ -167,6 +167,7 @@ contest_detail: 比赛详情
 contest_edit: 编辑比赛
 contest_main: 比赛
 contest_manage: 比赛管理
+contest_print: 打印
 contest_problemlist: 题目列表
 contest_scoreboard: 比赛成绩表
 contest_user: 参赛者管理
@@ -592,6 +593,7 @@ Pretest Your Code: 使用自定义数据测试
 Pretest: 自测
 Pretest?: 自测?
 Preview: 预览
+Print: 打印
 Privacy: 隐私
 Problem {1} not found.: 题目 {1} 不存在。
 Problem Categories: 题目标签

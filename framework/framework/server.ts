@@ -1,3 +1,4 @@
+/* eslint-disable ts/no-unsafe-declaration-merging */
 import http from 'http';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -8,6 +9,7 @@ import fs from 'fs-extra';
 import Koa from 'koa';
 import Body from 'koa-body';
 import Compress from 'koa-compress';
+import Schema from 'schemastery';
 import { Shorty } from 'shorty.js';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
@@ -76,7 +78,8 @@ export interface HydroResponse {
     type: string;
     status: number;
     template?: string;
-    /** If set, and pjax content was request from client,
+    /**
+     * If set, and pjax content was request from client,
      *  The template will be used for rendering.
      */
     pjax?: string;
@@ -86,14 +89,14 @@ export interface HydroResponse {
     attachment: (name: string, stream?: any) => void;
     addHeader: (name: string, value: string) => void;
 }
-type HydroContext = {
+interface HydroContext {
     request: HydroRequest;
     response: HydroResponse;
     args: Record<string, any>;
     UiContext: Record<string, any>;
     domain: { _id: string };
     user: { _id: number };
-};
+}
 export type KoaContext = Koa.Context & {
     HydroContext: HydroContext;
     handler: any;
@@ -102,14 +105,14 @@ export type KoaContext = Koa.Context & {
     holdFiles: (string | File)[];
 };
 
-export type TextRenderer = {
+export interface TextRenderer {
     output: 'html' | 'json' | 'text';
     render: (name: string, args: Record<string, any>, context: Record<string, any>) => string | Promise<string>;
-};
-export type BinaryRenderer = {
+}
+export interface BinaryRenderer {
     output: 'binary';
     render: (name: string, args: Record<string, any>, context: Record<string, any>) => Buffer | Promise<Buffer>;
-};
+}
 export type Renderer = (BinaryRenderer | TextRenderer) & {
     name: string;
     accept: readonly string[];
@@ -138,7 +141,7 @@ export interface UserModel {
     _id: number;
 }
 
-export interface HandlerCommon<C> { } // eslint-disable-line @typescript-eslint/no-unused-vars
+export interface HandlerCommon<C> { } // eslint-disable-line ts/no-unused-vars
 export class HandlerCommon<C> {
     static [kHandler]: string | boolean = 'HandlerCommon';
     session: Record<string, any>;
@@ -213,7 +216,6 @@ export class Handler<C = CordisContext> extends HandlerCommon<C> {
     static [kHandler] = 'Handler';
 
     loginMethods: any;
-    noCheckPermView = false;
     notUsage = false;
     allowCors = false;
     __param: Record<string, decorators.ParamOption<any>[]>;
@@ -247,6 +249,7 @@ export class Handler<C = CordisContext> extends HandlerCommon<C> {
 
     async onerror(error: HydroError) {
         error.msg ||= () => error.message;
+        console.error(`Error on user request: ${error.msg()}\n`, error);
         if (error instanceof UserFacingError && !process.env.DEV) error.stack = '';
         this.response.status = error instanceof UserFacingError ? error.code : 500;
         this.response.template = error instanceof UserFacingError ? 'error.html' : 'bsod.html';
@@ -286,6 +289,7 @@ export class ConnectionHandler<C> extends HandlerCommon<C> {
 
     onerror(err: HydroError) {
         if (err instanceof UserFacingError) err.stack = this.request.path;
+        else console.error('Error on user websocket:', err);
         this.send({
             error: {
                 name: err.name,
@@ -324,19 +328,19 @@ function executeMiddlewareStack(context: any, middlewares: { name: string, func:
     return dispatch(0);
 }
 
-export interface WebServiceConfig {
-    keys: string[];
-    proxy: boolean;
-    cors?: string;
-    upload?: string;
-    port: number;
-    host?: string;
-    xff?: string;
-    xhost?: string;
-    enableSSE?: boolean;
-}
-
 export class WebService<C extends CordisContext = CordisContext> extends Service<never, C> {
+    static Config = Schema.object({
+        keys: Schema.array(Schema.string()),
+        proxy: Schema.boolean(),
+        cors: Schema.string(),
+        upload: Schema.string(),
+        port: Schema.number(),
+        host: Schema.string(),
+        xff: Schema.string(),
+        xhost: Schema.string(),
+        enableSSE: Schema.boolean(),
+    });
+
     private registry: Record<string, any> = Object.create(null);
     private registrationCount = Counter();
     private serverLayers = [];
@@ -344,6 +348,7 @@ export class WebService<C extends CordisContext = CordisContext> extends Service
     private wsLayers = [];
     private captureAllRoutes = Object.create(null);
     private customDefaultContext: C;
+    private activeHandlers: Map<Handler<C>, { start: number, name: string }> = new Map();
 
     renderers: Record<string, Renderer> = Object.create(null);
     server = koa;
@@ -352,7 +357,7 @@ export class WebService<C extends CordisContext = CordisContext> extends Service
     Handler = Handler;
     ConnectionHandler = ConnectionHandler;
 
-    constructor(ctx: C, public config: WebServiceConfig) {
+    constructor(ctx: C, public config: ReturnType<typeof WebService.Config>) {
         super(ctx, 'server');
         ctx.mixin('server', ['Route', 'Connection', 'withHandlerClass']);
         this.server.keys = this.config.keys;
@@ -471,6 +476,14 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         });
     }
 
+    public statistics() {
+        const count = Counter();
+        for (const [, t] of this.activeHandlers.entries()) {
+            count[t.name]++;
+        }
+        return count;
+    }
+
     async listen() {
         this.ctx.effect(() => () => {
             httpServer.close();
@@ -493,9 +506,11 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         const method = ctx.method.toLowerCase();
         const name = ((Object.hasOwn(HandlerClass, kHandler) && typeof HandlerClass[kHandler] === 'string')
             ? HandlerClass[kHandler] : HandlerClass.name).replace(/Handler$/, '');
+        this.activeHandlers.set(h, { start: Date.now(), name });
         try {
             const operation = (method === 'post' && ctx.request.body?.operation)
-                ? `_${ctx.request.body.operation}`.replace(/_([a-z])/gm, (s) => s[1].toUpperCase())
+                // eslint-disable-next-line regexp/no-unused-capturing-group
+                ? `_${ctx.request.body.operation}`.replace(/_([a-z])/g, (s) => s[1].toUpperCase())
                 : '';
 
             // FIXME: should pass type check
@@ -563,6 +578,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 h.response.type = 'text/plain';
                 h.response.body = `${err.message}\n${err.stack}`;
             }
+        } finally {
+            this.activeHandlers.delete(h);
         }
     }
 
@@ -597,6 +614,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         ctx.handler = h;
         h.conn = conn;
         let closed = false;
+        this.activeHandlers.set(h, { start: Date.now(), name: HandlerClass.name });
 
         const clean = async (err?: Error) => {
             if (closed) return;
@@ -614,6 +632,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 }
             } finally {
                 await sub.dispose();
+                this.activeHandlers.delete(h);
             }
         };
 
@@ -761,7 +780,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         this.ctx.on(`handler/register/${name}`, callback as any);
     }
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
+    // eslint-disable-next-line ts/naming-convention
     public Route(name: string, path: string, RouteHandler: typeof Handler<C>, ...permPrivChecker) {
         // if (name === 'contest_scoreboard') {
         //     console.log('+++', this.ctx);
@@ -770,7 +789,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         return this.register('route', name, path, RouteHandler, ...permPrivChecker);
     }
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
+    // eslint-disable-next-line ts/naming-convention
     public Connection(name: string, path: string, RouteHandler: typeof ConnectionHandler<C>, ...permPrivChecker) {
         return this.register('conn', name, path, RouteHandler, ...permPrivChecker);
     }

@@ -4,7 +4,7 @@ import { map } from 'lodash';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import FileSelectAutoComplete from 'vj/components/autocomplete/FileSelectAutoComplete';
-import { ActionDialog, ConfirmDialog, InfoDialog } from 'vj/components/dialog/index';
+import { ActionDialog, confirm, InfoDialog } from 'vj/components/dialog/index';
 import createHint from 'vj/components/hint';
 import Notification from 'vj/components/notification';
 import { previewFile } from 'vj/components/preview/preview.page';
@@ -175,14 +175,21 @@ const page = new NamedPage('problem_files', () => {
                       style={{ ...style, ...(highlight ? { color: 'transparent', background: 'transparent', caretColor: 'black' } : {}) }}
                       value={original}
                       onChange={(e) => setOriginal(e.currentTarget.value)}
-                    ></input>
+                    />
                   </div>
-                  <div className="textbox-container" style={{
-                    position: 'absolute', top: 0, left: 0, zIndex: 0,
-                  }}>
-                    {highlight && <span className="textbox" style={{
-                      ...style, border: 'none', display: 'inline-flex', alignItems: 'center',
-                    }} dangerouslySetInnerHTML={{ __html: highlight }} />}
+                  <div
+                    className="textbox-container"
+                    style={{
+                      position: 'absolute', top: 0, left: 0, zIndex: 0,
+                    }}
+                  >
+                    {highlight && <span
+                      className="textbox"
+                      style={{
+                        ...style, border: 'none', display: 'inline-flex', alignItems: 'center',
+                      }}
+                      dangerouslySetInnerHTML={{ __html: highlight }}
+                    />}
                   </div>
                 </div>
               </label>
@@ -237,7 +244,7 @@ const page = new NamedPage('problem_files', () => {
             </tbody>
           </table>
         </div>}
-      </div >;
+      </div>;
     }
 
     const promise = new ActionDialog({
@@ -255,10 +262,7 @@ const page = new NamedPage('problem_files', () => {
 
   async function handleClickRemove(ev, type) {
     const file = [$(ev.currentTarget).parent().parent().attr('data-filename')];
-    const action = await new ConfirmDialog({
-      $body: tpl.typoMsg(i18n('Confirm to delete the file?')),
-    }).open();
-    if (action !== 'yes') return;
+    if (!(await confirm(i18n('Confirm to delete the file?')))) return;
     try {
       await request.post('./files', {
         operation: 'delete_files',
@@ -275,10 +279,7 @@ const page = new NamedPage('problem_files', () => {
   async function handleClickRemoveSelected(type) {
     const selectedFiles = ensureAndGetSelectedFiles(type);
     if (selectedFiles === null) return;
-    const action = await new ConfirmDialog({
-      $body: tpl.typoMsg(i18n('Confirm to delete the selected files?')),
-    }).open();
-    if (action !== 'yes') return;
+    if (!(await confirm(i18n('Confirm to delete the selected files?')))) return;
     try {
       await request.post('', {
         operation: 'delete_files',

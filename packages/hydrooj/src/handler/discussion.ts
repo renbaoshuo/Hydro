@@ -95,7 +95,7 @@ class DiscussionNodeHandler extends DiscussionHandler {
     async get(domainId: string, type: string, _name: string, page = 1) {
         let name: ObjectId | string | number;
         if (ObjectId.isValid(_name)) name = new ObjectId(_name);
-        else if (isSafeInteger(parseInt(_name, 10))) name = parseInt(_name, 10);
+        else if (isSafeInteger(Number.parseInt(_name, 10))) name = Number.parseInt(_name, 10);
         else name = _name;
         const hidden = this.user.own(this.vnode) || this.user.hasPerm(PERM.PERM_EDIT_DISCUSSION) ? {} : { hidden: false };
         const [ddocs, dpcount] = await this.paginate(
@@ -238,7 +238,7 @@ class DiscussionDetailHandler extends DiscussionHandler {
             message: 'User {0} mentioned you in {1:link}',
             params: [this.user.uname, `/d/${domainId}${this.request.path}`],
         });
-        await Promise.all(uids.map((i) => message.send(1, i, msg, message.FLAG_RICHTEXT | message.FLAG_UNREAD)));
+        await message.send(1, uids, msg, message.FLAG_RICHTEXT | message.FLAG_UNREAD);
         const drid = await discussion.addReply(domainId, did, this.user._id, content, this.request.ip);
         this.back({ drid });
     }
@@ -255,7 +255,7 @@ class DiscussionDetailHandler extends DiscussionHandler {
             message: 'User {0} mentioned you in {1:link}',
             params: [this.user.uname, `/d/${domainId}${this.request.path}`],
         });
-        await Promise.all(uids.map((i) => message.send(1, i, msg, message.FLAG_RICHTEXT | message.FLAG_UNREAD)));
+        await message.send(1, uids, msg, message.FLAG_RICHTEXT | message.FLAG_UNREAD);
         await discussion.addTailReply(domainId, drid, this.user._id, content, this.request.ip);
         this.back();
     }
@@ -368,15 +368,8 @@ class DiscussionRawHandler extends DiscussionHandler {
 
 class DiscussionEditHandler extends DiscussionHandler {
     async get() {
-        const path = [
-            ['Hydro', 'homepage'],
-            ['discussion_main', 'discussion_main'],
-            [this.vnode.title, 'discussion_node', { type: discussion.typeDisplay[this.ddoc.parentType], name: this.ddoc.parentId }, true],
-            [this.ddoc.title, 'discussion_detail', { did: this.ddoc.docId }, true],
-            ['discussion_edit', null],
-        ];
         this.response.template = 'discussion_edit.html';
-        this.response.body = { ddoc: this.ddoc, path };
+        this.response.body = { ddoc: this.ddoc };
     }
 
     @param('did', Types.ObjectId)

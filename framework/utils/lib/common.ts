@@ -1,14 +1,8 @@
 declare global {
-    interface StringConstructor {
-        random: (digit?: number, dict?: string) => string;
-    }
     interface String {
         format: (...args: Array<any>) => string;
         formatFromArray: (args: any[]) => string;
         rawformat: (object: any) => string;
-    }
-    interface ArrayConstructor {
-        isDiff: (a: any[], b: any[]) => boolean;
     }
     interface Math {
         sum: (...args: Array<number[] | number>) => number;
@@ -28,6 +22,7 @@ export function randomstring(digit = 32, dict = defaultDict) {
     return str;
 }
 try {
+    // @ts-ignore
     String.random = randomstring;
 } catch (e) { } // Cannot add property random, object is not extensible
 
@@ -63,7 +58,7 @@ String.prototype.rawformat = function rawFormat(object) {
     return [res[0], object, res[1]].join();
 };
 
-Array.isDiff = function isDiff(a, b) {
+export function diffArray(a, b) {
     if (a.length !== b.length) return true;
     a.sort();
     b.sort();
@@ -71,7 +66,12 @@ Array.isDiff = function isDiff(a, b) {
         if (a[i] !== b[i]) return true;
     }
     return false;
-};
+}
+
+try {
+    // @ts-ignore
+    Array.isDiff = diffArray;
+} catch (e) { } // Cannot add property isDiff, object is not extensible
 
 // @ts-ignore
 Date.prototype.format = function formatDate(fmt = '%Y-%m-%d %H:%M:%S') {
@@ -166,7 +166,7 @@ export function parseTimeMS(str: string | number, throwOnError = true) {
     const match = TIME_RE.exec(str);
     if (!match && throwOnError) throw new Error(`${str} error parsing time`);
     if (!match) return 1000;
-    return Math.floor(parseFloat(match[1]) * TIME_UNITS[match[2].toLowerCase()]);
+    return Math.floor(Number.parseFloat(match[1]) * TIME_UNITS[match[2].toLowerCase()]);
 }
 
 export function parseMemoryMB(str: string | number, throwOnError = true) {
@@ -174,7 +174,7 @@ export function parseMemoryMB(str: string | number, throwOnError = true) {
     const match = MEMORY_RE.exec(str);
     if (!match && throwOnError) throw new Error(`${str} error parsing memory`);
     if (!match) return 256;
-    return Math.ceil(parseFloat(match[1]) * MEMORY_UNITS[match[2].toLowerCase()]);
+    return Math.ceil(Number.parseFloat(match[1]) * MEMORY_UNITS[match[2].toLowerCase()]);
 }
 
 function _digit2(number: number) {
@@ -209,7 +209,7 @@ export function randomPick<T>(arr: T[]): T {
 export type StringKeys<O> = {
     [K in keyof O]: string extends O[K] ? K : never
 }[keyof O];
-const fSortR = /[^\d]+|\d+/g;
+const fSortR = /\D+|\d+/g;
 export function sortFiles(files: string[]): string[];
 export function sortFiles<T extends { _id: string }>(files: T[], key?: '_id'): T[];
 export function sortFiles<T extends Record<string, any>>(files: T[], key: StringKeys<T>): T[];
@@ -236,3 +236,12 @@ export function sortFiles(files: Record<string, any>[] | string[], key = '_id') 
         });
     return result.map((x) => (isString ? x.name : (delete x._weights && x)));
 }
+
+export const getAlphabeticId = (() => {
+    // A...Z, AA...AZ, BA...BZ, ...
+    const f = (a: number) => (a < 0 ? '' : f(a / 26 - 1) + String.fromCharCode((a % 26) + 65)) as string;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const cache = alphabet.split('');
+    for (const ch of alphabet) cache.push(...alphabet.split('').map((c) => ch + c));
+    return (i: number) => cache[i] || (i < 0 ? '?' : f(i));
+})();

@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { getAlphabeticId } from '@hydrooj/utils/lib/common';
 import yaml from 'js-yaml';
 import React from 'react';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
@@ -31,12 +32,12 @@ function Balloon({ tdoc, val }) {
                 <tr key={pid}>
                   <td>
                     {now === pid
-                      ? (<b>{String.fromCharCode(65 + tdoc.pids.indexOf(+pid))}</b>)
-                      : (<span>{String.fromCharCode(65 + tdoc.pids.indexOf(+pid))}</span>)}
+                      ? (<b>{getAlphabeticId(tdoc.pids.indexOf(+pid))}</b>)
+                      : (<span>{getAlphabeticId(tdoc.pids.indexOf(+pid))}</span>)}
                   </td>
                   <td>
                     <HexColorInput
-                      className='textbox'
+                      className="textbox"
                       color={c}
                       onFocus={() => { setNow(pid); setColor(c); }}
                       onChange={(e) => { val[+pid].color = e; setColor(e); }}

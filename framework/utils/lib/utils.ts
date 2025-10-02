@@ -5,11 +5,11 @@ import { Duplex, PassThrough, Writable } from 'stream';
 import { inspect } from 'util';
 import type { Entry, ZipReader } from '@zip.js/zip.js';
 import fs from 'fs-extra';
-import moment, { isMoment, Moment } from 'moment-timezone';
-import { ObjectId } from 'mongodb';
+import type { Moment } from 'moment';
 import { Exporter, Factory, Logger as Reggol } from 'reggol';
 import type * as superagent from 'superagent';
-export * as yaml from 'js-yaml';
+
+export * from '@hydrooj/utils/lib/common';
 export * as fs from 'fs-extra';
 
 Factory.formatters['d'] = (value, exporter) => Reggol.color(exporter, 3, value);
@@ -25,8 +25,8 @@ factory.addExporter(new Exporter.Console({
         margin: 1,
     },
     timestamp: Date.now(),
+    levels: { default: process.env.DEV ? 3 : 2 },
 }));
-factory.exporters.get(1).levels = { default: process.env.DEV ? 3 : 2 };
 
 function createLogger(name: string) {
     return factory.createLogger(name);
@@ -34,7 +34,6 @@ function createLogger(name: string) {
 
 export type Logger = Reggol & { new(name: string): Reggol & Logger };
 export const Logger = createLogger as any as Logger;
-export { moment };
 
 const encrypt = (algorithm, content) => crypto.createHash(algorithm).update(content).digest('hex');
 export const sha1 = (content: string) => encrypt('sha1', content);
@@ -146,6 +145,18 @@ export namespace Time {
     }
 
     export function getObjectID(timestamp: string | Date | Moment, allZero = true) {
+        let isMoment: (x: any) => x is Moment;
+        let ObjectId: typeof import('bson').ObjectId; // eslint-disable-line
+        try {
+            ({ ObjectId } = require('bson'));
+        } catch (e) {
+            throw new Error('No bson module found');
+        }
+        try {
+            ({ isMoment } = require('moment'));
+        } catch (e) {
+            throw new Error('No moment module found');
+        }
         let _timestamp: number;
         if (typeof timestamp === 'string') _timestamp = new Date(timestamp).getTime();
         else if (isMoment(timestamp)) _timestamp = timestamp.toDate().getTime();
@@ -242,10 +253,10 @@ export function findFileSync(pathname: string, doThrow: boolean | Error = true) 
     return null;
 }
 
-export async function retry(func: Function, ...args: any[]): Promise<any>;
-export async function retry(times: number, func: Function, ...args: any[]): Promise<any>;
+export async function retry<Arg extends any[], Ret>(func: (...args: Arg) => Ret, ...args: Arg): Promise<Ret>;
+export async function retry<Arg extends any[], Ret>(times: number, func: (...args: Arg) => Ret, ...args: Arg): Promise<Ret>;
 // eslint-disable-next-line consistent-return
-export async function retry(arg0: number | Function, func: any, ...args: any[]) {
+export async function retry(arg0: number | ((...args: any[]) => any), func: any, ...args: any[]): Promise<any> {
     let res;
     if (typeof arg0 !== 'number') {
         args = [func, ...args];
@@ -343,7 +354,7 @@ export async function extractZip<T>(zipOrEntries: ZipReader<T> | Entry[], dest: 
     for (const entry of entries) {
         const name = shouldStrip ? entry.filename.substring(entries[0].filename.length) : entry.filename;
         const d = sanitize(dest, canonical(name));
-        if (entry.directory) {
+        if (entry.directory === true) {
             await fs.mkdir(d, { recursive: true });
             continue;
         }
@@ -387,4 +398,4 @@ export async function pipeRequest(req: superagent.Request, w: fs.WriteStream, ti
     }
 }
 
-export * from '@hydrooj/utils/lib/common';
+export * as yaml from 'js-yaml';

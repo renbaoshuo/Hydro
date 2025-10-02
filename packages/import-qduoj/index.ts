@@ -4,7 +4,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import {
     buildContent, Context, extractZip, FileTooLargeError, fs, Handler, PERM,
-    ProblemConfigFile, ProblemModel, Schema, ValidationError, yaml, Zip,
+    ProblemConfigFile, ProblemModel, randomstring, Schema, ValidationError, yaml, Zip,
 } from 'hydrooj';
 
 const tmpdir = path.join(os.tmpdir(), 'hydro', 'import-qduoj');
@@ -26,7 +26,10 @@ const ProblemSchema = Schema.object({
     })),
     hint: StringValue,
     source: Schema.union([StringValue, Schema.string()]),
-    display_id: Schema.string(),
+    display_id: Schema.transform(
+        Schema.union([Schema.number(), Schema.string()]),
+        (value) => (typeof value === 'number' ? `P${value.toString()}` : value),
+    ),
     time_limit: Schema.union([Schema.number(), Schema.string()]).required(),
     memory_limit: Schema.union([Schema.number(), Schema.string()]).required(),
     spj: Schema.union([
@@ -46,7 +49,7 @@ const ProblemSchema = Schema.object({
 class ImportQduojHandler extends Handler {
     async fromFile(domainId: string, zipfile: string) {
         const zip = new Zip.ZipReader(Readable.toWeb(fs.createReadStream(zipfile)));
-        const tmp = path.resolve(tmpdir, String.random(32));
+        const tmp = path.resolve(tmpdir, randomstring(32));
         await extractZip(zip, tmp, {
             strip: true,
             parseError: (e) => new ValidationError('zip', null, e.message),

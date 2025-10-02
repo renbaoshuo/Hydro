@@ -1,11 +1,10 @@
-/* eslint-disable object-curly-newline */
 import assert from 'assert';
 import {
     Filter, FindCursor, ObjectId, OnlyFieldsOfType, PushOperator, UpdateFilter,
 } from 'mongodb';
 import { Context } from '../context';
 import {
-    Content, ContestClarificationDoc, DiscussionDoc,
+    Content, ContestClarificationDoc, ContestPrintDoc, DiscussionDoc,
     DiscussionReplyDoc, ProblemDoc, ProblemStatusDoc,
     Tdoc, TrainingDoc,
 } from '../interface';
@@ -28,6 +27,7 @@ export const TYPE_DISCUSSION = 21 as const;
 export const TYPE_DISCUSSION_REPLY = 22 as const;
 export const TYPE_CONTEST = 30 as const;
 export const TYPE_CONTEST_CLARIFICATION = 31 as const;
+export const TYPE_CONTEST_PRINT = 32 as const;
 export const TYPE_TRAINING = 40 as const;
 
 export interface DocType {
@@ -38,14 +38,15 @@ export interface DocType {
     [TYPE_DISCUSSION]: DiscussionDoc;
     [TYPE_DISCUSSION_REPLY]: DiscussionReplyDoc;
     [TYPE_CONTEST]: Tdoc;
+    [TYPE_CONTEST_PRINT]: ContestPrintDoc;
     [TYPE_CONTEST_CLARIFICATION]: ContestClarificationDoc;
     [TYPE_TRAINING]: TrainingDoc;
 }
 
 export interface DocStatusType {
-    [TYPE_PROBLEM]: ProblemStatusDoc,
+    [TYPE_PROBLEM]: ProblemStatusDoc;
     // FIXME: this need to be typed
-    [key: number]: any
+    [key: number]: any;
 }
 
 export async function add<T extends keyof DocType, K extends DocType[T]['docId']>(
@@ -104,9 +105,9 @@ export async function set<K extends keyof DocType>(
 ): Promise<DocType[K]> {
     await bus.parallel('document/set', domainId, docType, docId, $set, $unset);
     const update: UpdateFilter<DocType[K]> = {};
-    if ($set) update.$set = $set;
-    if ($unset) update.$unset = $unset;
-    if ($push) update.$push = $push;
+    if ($set && Object.keys($set).length) update.$set = $set;
+    if ($unset && Object.keys($unset).length) update.$unset = $unset;
+    if ($push && Object.keys($push).length) update.$push = $push;
     return await coll.findOneAndUpdate(
         { domainId, docType, docId },
         update,
@@ -317,14 +318,14 @@ export async function setMultiStatus<K extends keyof DocStatusType>(
     );
 }
 
-export async function setStatusIfNotCondition<T extends keyof DocStatusType>(
+export async function setStatusIfCondition<T extends keyof DocStatusType>(
     domainId: string, docType: T, docId: DocStatusType[T]['docId'], uid: number,
     filter: Filter<DocStatusType[T]>, args: Partial<DocStatusType[T]> = {},
     returnDocument: 'before' | 'after' = 'after',
 ): Promise<DocStatusType[T]> {
     try {
         return await collStatus.findOneAndUpdate(
-            { domainId, docType, docId, uid, $nor: [filter] },
+            { domainId, docType, docId, uid, ...filter },
             { $set: args },
             { upsert: true, returnDocument },
         );
@@ -338,8 +339,8 @@ export async function setIfNotStatus<T extends keyof DocStatusType, K extends ke
     key: K, value: DocStatusType[T][K], ifNot: DocStatusType[T][K], args: Partial<DocStatusType[T]>,
     returnDocument: 'before' | 'after' = 'after',
 ): Promise<DocStatusType[T]> {
-    return await setStatusIfNotCondition(
-        domainId, docType, docId, uid, { [key]: ifNot } as any,
+    return await setStatusIfCondition(
+        domainId, docType, docId, uid, { [key]: { $ne: ifNot } } as any,
         { [key]: value, ...args }, returnDocument,
     );
 }
@@ -474,13 +475,14 @@ global.Hydro.model.document = {
     revSetStatus,
     set,
     setIfNotStatus,
-    setStatusIfNotCondition,
+    setStatusIfCondition,
     setStatus,
     setMultiStatus,
     setSub,
 
     TYPE_CONTEST,
     TYPE_CONTEST_CLARIFICATION,
+    TYPE_CONTEST_PRINT,
     TYPE_DISCUSSION,
     TYPE_DISCUSSION_NODE,
     TYPE_DISCUSSION_REPLY,

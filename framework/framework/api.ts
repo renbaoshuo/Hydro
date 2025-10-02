@@ -11,27 +11,27 @@ const REDIRECT = Symbol.for('hydro.api.response.redirect');
 
 type MaybePromise<T> = T | Promise<T>;
 export type ApiType = 'Query' | 'Mutation' | 'Subscription';
-export type ApiCall<Type extends ApiType, Arg, Res, Progress = never> = {
+export interface ApiCall<Type extends ApiType, Arg, Res, Progress = void> {
     readonly type: Type;
     readonly input: Schema<Arg>;
     readonly func: (Type extends 'Subscription'
         ? (context: any, args: Arg, emit: (payload: Res) => void) => (() => MaybePromise<void>)
         : (context: any, args: Arg) => MaybePromise<Res | AsyncGenerator<Progress, Res, never>>);
     readonly hooks: ApiCall<'Query', Arg, void>[];
-};
+}
 
-export const _get = <Type extends ApiType>(type: Type) => <Arg, Res, Progress>(
+export const _get = <Type extends ApiType>(type: Type) => <Arg, Res, Progress = void>(
     schema: Schema<Arg>,
     func: ApiCall<Type, Arg, Res, Progress>['func'],
-    hooks: ApiCall<'Query', Arg, void, never>[] = [],
-): ApiCall<Type, Arg, Res, Progress> => ({ input: schema, func, hooks, type } as const); // eslint-disable-line
+    hooks: ApiCall<'Query', Arg, void, void>[] = [],
+): ApiCall<Type, Arg, Res, Progress> => ({ input: schema, func, hooks, type } as const);
 
 export const Query = _get('Query');
 export const Mutation = _get('Mutation');
 export const Subscription = _get('Subscription');
 
 export class BinaryResponse {
-    [BINARY]: true;
+    [BINARY] = true;
     constructor(public readonly data: Buffer, public filename: string) { }
     static check(value: any): value is BinaryResponse {
         return value && typeof value === 'object' && BINARY in value && value[BINARY] === true;
@@ -39,7 +39,7 @@ export class BinaryResponse {
 }
 
 export class RedirectResponse {
-    [REDIRECT]: true;
+    [REDIRECT] = true;
     constructor(public readonly url: string) { }
     static check(value: any): value is RedirectResponse {
         return value && typeof value === 'object' && REDIRECT in value && value[REDIRECT] === true;
@@ -57,7 +57,7 @@ export interface Apis {
     builtin: {
         'query.batch': ApiCall<'Query', { op: string, args: any }[], { [key: string]: any }>;
         'mutation.batch': ApiCall<'Mutation', { op: string, args: any }[], { [key: string]: any }>;
-    }
+    };
     test: typeof TestApis;
 }
 export type FlattenedApis = Apis[keyof Apis];
@@ -68,8 +68,7 @@ type MKeyOf<T> = T extends any ? keyof T : never;
 type MId<T> = { [K in MKeyOf<T>]: T[K] } & {};
 type ProjectionSchema<T> = T extends Array<infer U>
     ? ProjectionSchema<U>
-    : | { [K in keyof T]?: ProjectionSchemaId | ProjectionSchema<T[K]> }
-    | Record<keyof any, ProjectionSchemaId | object>;
+    : { [K in keyof T]?: ProjectionSchemaId | ProjectionSchema<T[K]> } | Record<keyof any, ProjectionSchemaId | object>;
 type AsKeys<T> = T extends Array<infer U extends string> ? Record<U, 1> : T;
 type Projection<T, S> = S extends ProjectionSchemaId
     ? T : T extends Array<infer U> ? Array<MId<Projection<U, S>>> : {
@@ -116,14 +115,16 @@ export class ApiService extends Service {
         super(ctx, 'api');
     }
 
-    provide(calls: Partial<FlattenedApis>) {
+    provide(calls: Partial<FlattenedApis>, atNameSpace = '') {
         this.ctx.effect(() => {
             for (const key in calls) {
-                APIS[key] = calls[key];
+                const target = `${atNameSpace ? `${atNameSpace}.` : ''}${key}`;
+                if (APIS[target]) console.warn(`API ${target} already exists, will be overridden`);
+                APIS[target] = calls[key];
             }
             return () => {
                 for (const key in calls) {
-                    delete APIS[key];
+                    delete APIS[`${atNameSpace ? `${atNameSpace}.` : ''}${key}`];
                 }
             };
         });
@@ -150,7 +151,7 @@ export class ApiService extends Service {
             await emitHook?.(`api/before/${callOrName}`, args);
         }
         let result = await func(context, args as any, sendPayload);
-        if (result && 'next' in result) {
+        if (result && typeof result === 'object' && 'next' in result) {
             const it = result as AsyncGenerator<any, any, never>;
             while (true) {
                 const value = await it.next(); // eslint-disable-line no-await-in-loop

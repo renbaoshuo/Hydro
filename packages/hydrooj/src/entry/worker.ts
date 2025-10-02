@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import os from 'os';
 import path from 'path';
 import cac from 'cac';
@@ -7,7 +6,7 @@ import { Context } from '../context';
 import { Logger } from '../logger';
 import { load } from '../options';
 import { MongoService } from '../service/db';
-import { ConfigService } from '../settings';
+import { SettingService } from '../settings';
 import {
     addon, builtinModel, locale, model, service,
 } from './common';
@@ -30,11 +29,11 @@ export async function apply(ctx: Context) {
     const fail = [];
     await locale(pending, fail);
     await ctx.plugin(MongoService, load() || {});
-    await ctx.plugin(ConfigService);
+    await ctx.plugin(SettingService);
     const modelSystem = require('../model/system');
     await modelSystem.runConfig();
     ctx = await new Promise((resolve) => {
-        ctx.inject(['loader', 'config', 'db'], (c) => {
+        ctx.inject(['loader', 'setting', 'db'], (c) => {
             resolve(c);
         });
     });
@@ -69,6 +68,14 @@ export async function apply(ctx: Context) {
     await loadDir(path.resolve(__dirname, '..', 'script'));
     await ctx.parallel('app/started');
     if (process.env.NODE_APP_INSTANCE === '0') {
+        const staticDir = path.join(os.homedir(), '.hydro/static');
+        await fs.emptyDir(staticDir);
+        // Use ordered copy to allow resource override
+        for (const f of Object.values(global.addons)) {
+            const dir = path.join(f, 'public');
+            // eslint-disable-next-line no-await-in-loop
+            if (await fs.pathExists(dir)) await fs.copy(dir, staticDir);
+        }
         await new Promise((resolve, reject) => {
             ctx.inject(['migration'], async (c) => {
                 c.migration.registerChannel('hydrooj', require('../upgrade').coreScripts);
@@ -81,10 +88,6 @@ export async function apply(ctx: Context) {
                 }
             });
         });
-    }
-    for (const f of Object.values(global.addons)) {
-        const dir = path.join(f, 'public');
-        if (await fs.pathExists(dir)) await fs.copy(dir, path.join(os.homedir(), '.hydro/static'));
     }
     ctx.inject(['server'], async ({ server }) => {
         await server.listen();

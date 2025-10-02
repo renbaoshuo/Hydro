@@ -1,3 +1,4 @@
+/* eslint-disable ts/no-unsafe-declaration-merging */
 import LoggerService from '@cordisjs/plugin-logger';
 import { TimerService } from '@cordisjs/plugin-timer';
 import * as cordis from 'cordis';
@@ -25,7 +26,7 @@ function provideModule<T extends keyof ModuleInterfaces>(type: T, id: string, mo
 
 export type Fiber = cordis.Fiber<Context>;
 
-export { Disposable, Plugin, FiberState } from 'cordis';
+export { Disposable, FiberState, Plugin } from 'cordis';
 
 export interface Context extends cordis.Context {
     [Context.events]: EventMap & cordis.Events<Context>;
@@ -71,6 +72,17 @@ export class Context extends cordis.Context {
         super();
         this.plugin(ApiMixin);
         this.plugin(TimerService);
-        this.plugin(LoggerService);
+        this.plugin(LoggerService, {
+            console: {
+                showDiff: false,
+                showTime: 'dd hh:mm:ss',
+                label: {
+                    align: 'right',
+                    width: 9,
+                    margin: 1,
+                },
+                levels: { default: process.env.DEV ? 3 : 2 },
+            },
+        });
     }
 }

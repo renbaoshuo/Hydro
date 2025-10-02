@@ -18,25 +18,23 @@ class MessageModel {
 
     @ArgMethod
     static async send(
-        from: number, to: number,
+        from: number, to: number | number[],
         content: string, flag: number = MessageModel.FLAG_UNREAD,
     ) {
-        const _id = new ObjectId();
-        const mdoc: MessageDoc = {
-            _id, from, to, content, flag,
-        };
-        await MessageModel.coll.insertOne(mdoc);
-        if (from !== to) bus.broadcast('user/message', to, mdoc);
+        if (!Array.isArray(to)) to = [to];
+        const base = { from, content, flag };
+        if (!to.length) return base;
+        await MessageModel.coll.insertMany(to.map((t) => ({ ...base, to: t })));
+        bus.broadcast('user/message', to, base);
         if (flag & MessageModel.FLAG_UNREAD) await user.inc(to, 'unreadMsg', 1);
-        return mdoc;
+        return base;
     }
 
     static async sendInfo(to: number, content: string) {
-        const _id = new ObjectId();
         const mdoc: MessageDoc = {
-            _id, from: 1, to, content, flag: MessageModel.FLAG_INFO | MessageModel.FLAG_I18N,
+            from: 1, to, content, flag: MessageModel.FLAG_INFO | MessageModel.FLAG_I18N,
         };
-        bus.broadcast('user/message', to, mdoc);
+        bus.broadcast('user/message', [to], mdoc);
     }
 
     static async get(_id: ObjectId) {

@@ -2,7 +2,7 @@ import os from 'os';
 import path from 'path';
 import cac from 'cac';
 import Schema from 'schemastery';
-import { fs, yaml } from '@hydrooj/utils';
+import { fs, randomstring, yaml } from '@hydrooj/utils';
 
 const argv = cac().parse();
 
@@ -30,9 +30,19 @@ export const JudgeSettings = Schema.object({
     rate: Schema.number().default(1),
     env: Schema.string().default(defaultEnv),
     host: Schema.any(),
-    secret: Schema.string().description('Judge Token Secret').default(String.random(32)),
+    secret: Schema.string().description('Judge Token Secret').default(randomstring(32)),
     disable: Schema.boolean().description('Disable builtin judge').default(false),
-    detail: Schema.boolean().description('Show diff detail').default(true),
+    detail: Schema.union([
+        Schema.const('full'),
+        Schema.const('case'),
+        Schema.const('none'),
+        Schema.transform(Schema.union([
+            Schema.boolean().deprecated(),
+            Schema.const('full'),
+            Schema.const('none'),
+            Schema.const('case'),
+        ]), (v) => (typeof v === 'boolean' ? (v ? 'full' : 'case') : v)),
+    ]).description('Show diff detail').default('full'),
     performance: Schema.boolean().description('Performance mode').default(false),
 });
 

@@ -8,8 +8,8 @@ proxy(superagent);
 
 interface FetchOptions {
     headers?: { [key: string]: string };
-    post?: Omit<FetchOptions, 'get' | 'post'>
-    get?: Omit<FetchOptions, 'get' | 'post'>
+    post?: Omit<FetchOptions, 'get' | 'post'>;
+    get?: Omit<FetchOptions, 'get' | 'post'>;
 }
 
 const defaultUA = `Hydro/${global.Hydro.version.hydrooj} VJudge/${global.Hydro.version.vjudge}`;
@@ -44,10 +44,10 @@ export class BasicFetcher {
         return $dom.window as DOMWindow & { html: string, headers: any };
     }
 
-    post(url: string) {
+    post(url: string, type = this.formType) {
         this.logger.debug('post', url, this.cookie);
         url = new URL(url, this.endpoint).toString();
-        let req = superagent.post(url).set('Cookie', this.cookie).set('User-Agent', this.UA).type(this.formType);
+        let req = superagent.post(url).set('Cookie', this.cookie).set('User-Agent', this.UA).type(type);
         if (this.fetchOptions.headers) req = req.set(this.fetchOptions.headers);
         if (this.fetchOptions.post?.headers) req = req.set(this.fetchOptions.post.headers);
         return this.account.proxy ? req.proxy(this.account.proxy) : req;

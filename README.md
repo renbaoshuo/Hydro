@@ -32,7 +32,7 @@ Hydro 设计了一套模块化的插件系统，可以方便地扩展系统功�
 使用插件系统，可以在修改功能后，仍然保证系统的可升级性。  
 Hydro 的所有历史版本均可平滑升级到最新版本。  
 
-插件使用和开发指南，请前往文档 [插件](https://docs.hydro.ac/plugins/) 和 [开发](https://docs.hydro.ac/dev/typescript/) 章节。
+插件使用和开发指南，请前往文档 [插件](https://docs.hydro.ac/docs/Hydro/plugins) 和 [开发](https://docs.hydro.ac/docs/Hydro/dev/typescript) 章节。
 
 ### 跨平台兼容，数据一键备份/导入
 
@@ -51,7 +51,7 @@ Hydro 提供了单系统多空间支持，可以方便地为不同的班级/年�
 ### 粒度精细的权限系统，灵活调节
 
 Hydro 的权限可以按比赛/作业分配给对应的用户，也可以将用户分组（班级），按组分配权限。
-有关权限节点，可以查看 [介绍](https://docs.hydro.ac/docs/) 下方截图。
+有关权限节点，可以查看 [介绍](https://docs.hydro.ac/docs/Hydro) 下方截图。
 
 ### 规模化支持，上千用户无压力，伸缩组秒级自动扩展
 
@@ -111,7 +111,40 @@ Hydro 用户群：1085853538
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
 
-## Hydro 5.0.0-beta.0 / UI 4.58.0-beta.0
+## Hydro 5.0.0-beta.9 / UI 4.58.0-beta.9
+
+- core: 修复 OI/IOI 赛制一血计算
+- judge: 修复 detail 设置
+- core: problems 接口按请求顺序返回
+- core: 添加解绑 OAuth 账户支持
+- framework: 支持 API namespace
+- judge: 优化比较器性能
+- core: 检查作业延期规则合法性
+- core: 踢出用户时自动标记权限为 Guest
+- ui: 删除域增加确认弹框
+- core: 允许重测同一记录覆盖题目状态
+
+## Hydro 5.0.0-beta.8 / UI 4.58.0-beta.8
+
+- core&ui: 添加比赛打印功能
+- core: 允许使用管理员权限直接邀请用户加入域
+- vjudge: 支持拉取远端题解
+- core: settings: 禁止 displayName 使用特殊 unicode 字符
+
+## Hydro 5.0.0-beta.6 / UI 4.58.0-beta.6
+
+- core: 修复网页端执行脚本返回值
+- core: patch: 支持从本地文件读取
+- core: 支持复制/导入题目时设置隐藏
+- prom-client: 添加连接数指标
+- core: 支持基于 restic 增量备份
+- ui: 添加 alert/prompt/confirm 函数
+- core&ui: 支持复制/导入题目时设置为隐藏
+- core: 添加比赛语言限制
+
+## Hydro 5.0.0-beta.3 / UI 4.58.0-beta.3
+
+### New Features
 
 - judge: 添加 checker 编译缓存
 - ui: 优化题目详情页面 OGP 信息
@@ -127,21 +160,39 @@ Hydro 用户群：1085853538
 - core: 分离 HMR 和 Watcher 组件
 - core: i18n: 添加 interface 选项
 - judge: 添加 kattis checker 支持
-- migrate: 修复 hustoj 自动运行
 - core: Settings: 支持使用 Schemastery
 - ui: 更新系统设置页面样式
-- import-qduoj: 修复 spj=null
-- core: 修复文件复制
 - core: 支持存储并显示提交记录重测历史
 - core: 新的加域逻辑
 - ui: UserSelect.Multi: 支持批量粘贴用户名
-- ui: 修复在线 IDE 右键菜单
-- ui: 修复未登录用户查看题目文件页
 - core: oauth: 支持绑定/解绑三方平台账户 (#971)
-- ui: 修复暗色模式表格边框 (#968)
 - core: 优化 icpc 题目包导入 (#966)
 - judge: 弃用 diff (#965)
 - core: 支持设置加域时自动加入小组
+- core: 添加 `--disable-worker` 启动选项
+- ui: 支持使用自定义字体
+- framework&core: 重构 Subscription API
+- core: 添加 fixStorage 脚本
+- ui: 允许跨页选择题目，支持批量选择题目
+- judge: 重构 config.detail 设置
+- core: 自动清理多余的静态文件
+- ui: 优化比赛题目列表显示
+- core: 添加比赛补题模式
+
+### Bug Fixes
+
+- migrate: 修复 hustoj 自动运行
+- import-qduoj: 修复 spj=null
+- core: 修复文件复制
+- ui: 修复在线 IDE 右键菜单
+- ui: 修复未登录用户查看题目文件页
+- ui: 修复暗色模式表格边框 (#968)
+- ui: 修复题解回复编辑权限
+- ui: 修复高亮行号显示
+- core: 修复 `User.serialize()` 参数
+- ui: 修复更换邮箱功能
+- ui: 修复比赛侧栏
+- ui: 修复文档链接
 
 ### Breaking API Changes
 
@@ -161,6 +212,7 @@ Hydro 用户群：1085853538
 - framework: 移除 ready 与 dispose 事件 (使用 ctx.effect 代替)
 - core: 最低要求 node 22
 - core: 弃用 AdmZip
+- utils: 移除 String.random 与 Array.isDiff
 
 ## Hydro 4.19.0 / UI 4.57.0
 

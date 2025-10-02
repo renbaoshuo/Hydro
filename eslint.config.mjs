@@ -1,20 +1,31 @@
 /* eslint-disable max-len */
-/* eslint-disable @typescript-eslint/naming-convention */
+/* eslint-disable ts/naming-convention */
 import path from 'node:path';
-import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
 import react from '@hydrooj/eslint-config';
 
-export default defineConfig([globalIgnores([
-    '**/{public,files}/**/*.js',
-    '**/dist',
-    '**/*.d.ts',
-    '**/node_modules',
-    '**/.*.js',
-    'packages/ui-default/public',
-]), {
-    extends: [react],
+const config = react({
+    ignores: [
+        '**/{public,files}/**/*.js',
+        '**/dist',
+        '**/*.d.ts',
+        '**/node_modules',
+        '**/.*.js',
+        'packages/ui-default/public',
+        'packages/hydrojudge/vendor',
+    ],
+    stylistic: {
+        indent: 4,
+    },
+    jsonc: false,
+    rules: {
+        'yaml/indent': ['warn', 2],
 
+        // There are too many `global` and `Function` in codebase already
+        'no-restricted-globals': 'off',
+        'ts/no-unsafe-function-type': 'off',
+    },
+}, {
     languageOptions: {
         ecmaVersion: 5,
         sourceType: 'module',
@@ -105,16 +116,57 @@ export default defineConfig([globalIgnores([
 
     rules: {
         'github/array-foreach': 0,
-        '@typescript-eslint/no-invalid-this': 0,
+        'ts/no-invalid-this': 0,
 
         // FIXME A bug with eslint-parser
         // 'template-curly-spacing': 'off',
 
-        '@stylistic/indent': [
-            'warn',
-            2,
-            { SwitchCase: 1 },
-        ],
+        'style/indent': ['warn', 2, {
+            ArrayExpression: 1,
+            CallExpression: {
+                arguments: 1,
+            },
+            flatTernaryExpressions: false,
+            FunctionDeclaration: {
+                body: 1,
+                parameters: 1,
+            },
+            FunctionExpression: {
+                body: 1,
+                parameters: 1,
+            },
+            ignoreComments: false,
+            ignoredNodes: [
+                'TSUnionType',
+                'TSIntersectionType',
+                'TSTypeParameterInstantiation',
+                'FunctionExpression > .params[decorators.length > 0]',
+                'FunctionExpression > .params > :matches(Decorator, :not(:first-child))',
+                'JSXElement',
+                'JSXElement > *',
+                'JSXAttribute',
+                'JSXIdentifier',
+                'JSXNamespacedName',
+                'JSXMemberExpression',
+                'JSXSpreadAttribute',
+                'JSXExpressionContainer',
+                'JSXOpeningElement',
+                'JSXClosingElement',
+                'JSXFragment',
+                'JSXOpeningFragment',
+                'JSXClosingFragment',
+                'JSXText',
+                'JSXEmptyExpression',
+                'JSXSpreadChild',
+            ],
+            ImportDeclaration: 1,
+            ObjectExpression: 1,
+            outerIIFEBody: 1,
+            SwitchCase: 1,
+            VariableDeclarator: 1,
+        }],
+        'style/jsx-indent-props': 'off',
+        'style/indent-binary-ops': 'off',
         'function-paren-newline': 'off',
         'no-mixed-operators': 'off',
         'no-await-in-loop': 'off',
@@ -139,14 +191,21 @@ export default defineConfig([globalIgnores([
     },
 }, {
     files: ['packages/ui-next/src/**/*.{ts,tsx}'],
-
     languageOptions: {
         globals: {
             ...globals.browser,
         },
     },
-
     rules: {
-        '@stylistic/indent': ['warn', 2],
+        'style/indent': ['warn', 2],
+        'style/indent-binary-ops': ['warn', 2],
     },
-}]);
+}, {
+    files: ['**/*.yaml', '**/*.yml'],
+    rules: {
+        'yaml/plain-scalar': 'off',
+        'style/no-trailing-spaces': 'off',
+        'max-len': 'off',
+    },
+});
+export default config;

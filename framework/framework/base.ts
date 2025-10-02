@@ -1,11 +1,16 @@
 import { PassThrough } from 'stream';
 import type { Next } from 'koa';
-import { pick } from 'lodash';
 import {
     HydroRequest, HydroResponse, KoaContext, serializer,
 } from '@hydrooj/framework';
 import { errorMessage } from '@hydrooj/utils/lib/utils';
 import { SystemError, UserFacingError } from './error';
+
+const pick = <T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> => {
+    const result: Partial<Pick<T, K>> = {};
+    for (const key of keys) result[key] = obj[key];
+    return result as Pick<T, K>;
+};
 
 export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
     // Base Layer
