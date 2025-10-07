@@ -925,14 +925,14 @@ export class ProblemSolutionHandler extends ProblemDetailHandler {
 
     @param('psid', Types.ObjectId)
     async postUpvote(domainId: string, psid: ObjectId) {
-        const [psdoc, pssdoc] = await solution.vote(domainId, psid, this.user._id, 1);
-        this.back({ vote: psdoc.vote, user_vote: pssdoc.vote });
+        const psdoc = await solution.vote(domainId, psid, this.user._id, 1);
+        this.back({ vote: psdoc.vote, user_vote: 1 });
     }
 
     @param('psid', Types.ObjectId)
     async postDownvote(domainId: string, psid: ObjectId) {
-        const [psdoc, pssdoc] = await solution.vote(domainId, psid, this.user._id, -1);
-        this.back({ vote: psdoc.vote, user_vote: pssdoc.vote });
+        const psdoc = await solution.vote(domainId, psid, this.user._id, -1);
+        this.back({ vote: psdoc.vote, user_vote: -1 });
     }
 }
 
@@ -974,7 +974,7 @@ export class ProblemStatisticsHandler extends ProblemDetailHandler {
             'record',
         );
         const [udict, udoc] = await Promise.all([
-            user.getListForRender(domainId, rsdocs.map((i) => i.uid), this.user.hasPerm(PERM.PERM_VIEW_DISPLAYNAME) ? ['displayName'] : []),
+            user.getListForRender(domainId, rsdocs.map((i) => i.uid), this.user.hasPerm(PERM.PERM_VIEW_USER_PRIVATE_INFO)),
             user.getById(domainId, this.pdoc.owner),
         ]);
         this.response.template = 'problem_statistics.html';
