@@ -130,6 +130,17 @@ export class ApiService extends Service {
         });
     }
 
+    serialize() {
+        const result = {};
+        for (const key in APIS) {
+            result[key] = {
+                type: APIS[key].type,
+                input: APIS[key].input.toJSON(),
+            };
+        }
+        return result;
+    }
+
     async execute(
         context: ApiExecutionContext, callOrName: ApiCall<ApiType, any, any> | string,
         rawArgs: any, emitHook?: any, project?: any, sendPayload?: (payload: any) => void,
@@ -179,7 +190,7 @@ export class ApiHandler<C extends Context> extends Handler<C> {
         if (!['get', 'post'].includes(this.request.method.toLowerCase())) {
             throw new MethodNotAllowedError(this.request.method);
         }
-        if (!APIS[op]) throw new BadRequestError('Invalid operation');
+        if (!APIS[op]) throw new BadRequestError(`Invalid API operation: ${op}`);
         if (APIS[op].type === 'Subscription') {
             throw new BadRequestError('Subscription operation cannot be called in HTTP handler');
         }
@@ -215,7 +226,7 @@ export class ApiConnectionHandler<C extends Context> extends ConnectionHandler<C
             this.isRpc = true;
             return;
         }
-        if (!APIS[op]) throw new BadRequestError('Invalid operation');
+        if (!APIS[op]) throw new BadRequestError(`Invalid API operation: ${op}`);
         if (APIS[op].type !== 'Subscription') {
             throw new BadRequestError('Only subscription operations are supported');
         }
@@ -239,7 +250,7 @@ export class ApiConnectionHandler<C extends Context> extends ConnectionHandler<C
                 throw new BadRequestError('Invalid message');
             }
         }
-        if (!APIS[message.op]) throw new BadRequestError('Invalid operation');
+        if (!APIS[message.op]) throw new BadRequestError(`Invalid API operation: ${message.op}`);
         if (APIS[message.op].type !== 'Subscription') {
             throw new BadRequestError('Only subscription operations are supported');
         }
@@ -255,9 +266,9 @@ export class ApiConnectionHandler<C extends Context> extends ConnectionHandler<C
     }
 }
 
-export function applyApiHandler(ctx: Context, name: string, path: string) {
+export async function applyApiHandler(ctx: Context, name: string, path: string) {
     ctx.plugin(ApiService);
-    ctx.inject(['server', 'api'], ({ Route, Connection }) => {
+    await ctx.inject(['server', 'api'], ({ Route, Connection }) => {
         Route(name, path, ApiHandler);
         Connection(`${name}_conn`, `${path}/conn`, ApiConnectionHandler);
     });

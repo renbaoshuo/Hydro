@@ -14,7 +14,7 @@ import problem, { ProblemDoc } from '../model/problem';
 import record from '../model/record';
 import { langs } from '../model/setting';
 import storage from '../model/storage';
-import * as system from '../model/system';
+import system from '../model/system';
 import TaskModel from '../model/task';
 import user from '../model/user';
 import {
@@ -334,7 +334,7 @@ class RecordMainConnectionHandler extends ConnectionHandler {
             if (!this.all) {
                 if (rdoc.contest && ![this.tid, '000000000000000000000000'].includes(rdoc.contest.toString())) return;
                 if (this.tid && rdoc.contest?.toString() !== '0'.repeat(24)) {
-                    if (contest.isLocked(this.tdoc)) return;
+                    if (contest.isLocked(this.tdoc) && !this.pretest) return;
                     if (!contest.canShowSelfRecord.call(this, this.tdoc, true)) return;
                 }
             }

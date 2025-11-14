@@ -15,7 +15,7 @@ import domain from '../model/domain';
 import MessageModel from '../model/message';
 import * as oplog from '../model/oplog';
 import { DOMAIN_SETTINGS, DOMAIN_SETTINGS_BY_KEY } from '../model/setting';
-import * as system from '../model/system';
+import system from '../model/system';
 import user from '../model/user';
 import {
     Handler, Mutation, param, post, Query, query, requireSudo, Types,
@@ -431,6 +431,25 @@ export const DomainApi = {
             const udoc = await user.getById(ddoc._id, ctx.user._id);
             if (!udoc.hasPerm(PERM.PERM_VIEW) && !udoc.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) return null;
             return ddoc;
+        },
+    ),
+    groups: Query(
+        Schema.object({
+            search: Schema.string(),
+            names: Schema.array(Schema.string()),
+            domainId: Schema.string().required(),
+        }),
+        async (ctx, args) => {
+            if (!ctx.user.hasPerm(PERM.PERM_VIEW) && !ctx.user.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) throw new PermissionError(PERM.PERM_VIEW);
+            const groups = await user.listGroup(args.domainId);
+            if (args.names?.length) {
+                return groups.filter((g) => args.names.includes(g.name));
+            }
+            if (args.search) {
+                const searchLower = args.search.toLowerCase();
+                return groups.filter((g) => g.name.toLowerCase().includes(searchLower));
+            }
+            return groups;
         },
     ),
     'domain.group': Mutation(

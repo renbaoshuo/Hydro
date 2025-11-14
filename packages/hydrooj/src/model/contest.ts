@@ -1,8 +1,9 @@
 import { sumBy } from 'lodash';
 import { Filter, ObjectId } from 'mongodb';
 import {
-    Counter, formatSeconds, getAlphabeticId, Time,
+    Counter, formatSeconds, getAlphabeticId, sleep, Time,
 } from '@hydrooj/utils/lib/utils';
+import { Context } from '../context';
 import {
     ContestAlreadyAttendedError, ContestNotFoundError,
     ContestScoreboardHiddenError, ValidationError,
@@ -11,14 +12,17 @@ import {
     BaseUserDict, ContestPrintDoc, ContestRule, ContestRules, ProblemDict, RecordDoc,
     ScoreboardConfig, ScoreboardNode, ScoreboardRow, SubtaskResult, Tdoc,
 } from '../interface';
+import avatar from '../lib/avatar';
 import bus from '../service/bus';
 import db from '../service/db';
 import type { Handler } from '../service/server';
 import { Optional } from '../typeutils';
 import { PERM, STATUS, STATUS_SHORT_TEXTS } from './builtin';
 import * as document from './document';
-import problem from './problem';
-import user, { User } from './user';
+import MessageModel from './message';
+import problem, { ProblemModel } from './problem';
+import RecordModel from './record';
+import UserModel, { User } from './user';
 
 export enum PrintTaskStatus {
     pending = 'pending',
@@ -233,7 +237,7 @@ const acm = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => (a.score || 0) === (b.score || 0) && (a.time || 0) === (b.time || 0));
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const udict = await user.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
+        const udict = await UserModel.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
         // Find first accept
         const first = {};
         const data = await document.collStatus.aggregate([
@@ -407,7 +411,7 @@ const oi = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => (a.score || 0) === (b.score || 0));
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const udict = await user.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
+        const udict = await UserModel.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
         const psdict = {};
         const first = {};
         const useRelativeTime = !!tdoc.duration;
@@ -776,7 +780,7 @@ const homework = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => a.score === b.score);
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const udict = await user.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
+        const udict = await UserModel.getListForRender(tdoc.domainId, uids, config.showDisplayName ? ['displayName'] : []);
         const columns = await this.scoreboardHeader(config, _, tdoc, pdict);
         const rows: ScoreboardRow[] = [
             columns,
@@ -824,6 +828,7 @@ export async function edit(domainId: string, tid: ObjectId, $set: Partial<Tdoc>)
     if ($set.rule && !RULES[$set.rule]) throw new ValidationError('rule');
     const tdoc = await document.get(domainId, document.TYPE_CONTEST, tid);
     if (!tdoc) throw new ContestNotFoundError(domainId, tid);
+    await bus.parallel('contest/before-edit', tdoc, $set);
     RULES[$set.rule || tdoc.rule].check(Object.assign(tdoc, $set));
     const res = await document.set(domainId, document.TYPE_CONTEST, tid, $set);
     await bus.parallel('contest/edit', res);
@@ -850,16 +855,30 @@ export async function getRelated(domainId: string, pid: number, rule?: string) {
 }
 
 export async function addBalloon(domainId: string, tid: ObjectId, uid: number, rid: ObjectId, pid: number) {
-    const balloon = await collBalloon.findOne({
-        domainId, tid, pid, uid,
-    });
-    if (balloon) return null;
-    const bdcount = await collBalloon.countDocuments({ domainId, tid, pid });
+    const balloon = await collBalloon.find({ domainId, tid, pid }).project({ uid: 1 }).toArray();
+    if (balloon.find((i) => i.uid === uid)) return null;
+    let isFirst = !balloon.length;
+    if (isFirst) {
+        let pending: RecordDoc[] = [];
+        do {
+            if (pending.length) await sleep(500); // eslint-disable-line no-await-in-loop
+            pending = await RecordModel.getMulti(domainId, { // eslint-disable-line no-await-in-loop
+                pid, contest: tid, _id: { $lt: rid }, status: {
+                    $in: [
+                        STATUS.STATUS_WAITING, STATUS.STATUS_COMPILING,
+                        STATUS.STATUS_JUDGING, STATUS.STATUS_FETCHED,
+                        STATUS.STATUS_ACCEPTED,
+                    ],
+                },
+            }).limit(1).toArray();
+        } while (pending.length && !pending.some((i) => i.status === STATUS.STATUS_ACCEPTED));
+        if (pending.some((i) => i.status === STATUS.STATUS_ACCEPTED)) isFirst = false;
+    }
     const newBdoc = {
-        _id: rid, domainId, tid, pid, uid, ...(!bdcount ? { first: true } : {}),
+        _id: rid, domainId, tid, pid, uid, ...(isFirst ? { first: true } : {}),
     };
     await collBalloon.insertOne(newBdoc);
-    bus.broadcast('contest/balloon', domainId, tid, newBdoc);
+    bus.emit('contest/balloon', domainId, tid, newBdoc);
     return rid;
 }
 
@@ -1089,7 +1108,34 @@ export function getMultiPrintTask(domainId: string, tid: ObjectId, query = {}) {
         .sort({ _id: 1 });
 }
 
+export async function apply(ctx: Context) {
+    ctx.on('contest/balloon', (domainId, tid, bdoc) => {
+        if (!bdoc.first) return;
+        (async () => {
+            const tsdocs = await getMultiStatus(domainId, { docId: tid, subscribe: 1 }).toArray();
+            const uids = Array.from<number>(new Set(tsdocs.map((tsdoc) => tsdoc.uid)));
+            const [team, tdoc, pdoc] = await Promise.all([
+                UserModel.getById(domainId, bdoc.uid),
+                get(domainId, tid),
+                ProblemModel.get(domainId, bdoc.pid),
+            ]);
+            await MessageModel.send(1, uids, JSON.stringify({
+                message: 'First Blood Notice\n{0} solved problem {1} ({2})',
+                avatar: avatar(team.avatar),
+                params: [team.uname, getAlphabeticId(tdoc.pids.indexOf(bdoc.pid)), pdoc.title],
+            }), MessageModel.FLAG_I18N);
+        })();
+    });
+    await ctx.db.ensureIndexes(
+        collBalloon,
+        { key: { domainId: 1, tid: 1, pid: 1, uid: 1 }, unique: true, name: 'basic' },
+        { key: { domainId: 1, tid: 1, pid: 1 }, unique: true, name: 'first', partialFilterExpression: { first: true } },
+    );
+}
+
 global.Hydro.model.contest = {
+    apply,
+
     RULES,
     PrintTaskStatus,
     buildContestRule,

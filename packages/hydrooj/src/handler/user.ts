@@ -23,7 +23,7 @@ import * as oplog from '../model/oplog';
 import problem, { ProblemDoc } from '../model/problem';
 import ScheduleModel from '../model/schedule';
 import SolutionModel from '../model/solution';
-import * as system from '../model/system';
+import system from '../model/system';
 import token from '../model/token';
 import user, { deleteUserCache } from '../model/user';
 import {
@@ -158,7 +158,7 @@ class UserWebauthnHandler extends Handler {
             if (!udoc._id) throw new UserNotFoundError(uname || 'user');
             if (!udoc.authn) throw new AuthOperationError('authn', 'disabled');
             allowCredentials = udoc._authenticators.map((authenticator) => ({
-                id: isoBase64URL.fromBuffer(authenticator.credentialID.buffer),
+                id: isoBase64URL.fromBuffer(new Uint8Array(authenticator.credentialID.buffer)),
             }));
             uid = udoc._id;
         }
@@ -174,7 +174,7 @@ class UserWebauthnHandler extends Handler {
 
     async post({ domainId, result, redirect }) {
         const challenge = this.session.challenge;
-        if (!challenge) throw new ForbiddenError();
+        if (!challenge) throw new ForbiddenError('no-challenge');
         const tdoc = await token.get(challenge, token.TYPE_WEBAUTHN);
         if (!tdoc) throw new InvalidTokenError(token.TYPE_TEXTS[token.TYPE_WEBAUTHN]);
         const udoc = await (tdoc.uid === 'login'
@@ -194,8 +194,8 @@ class UserWebauthnHandler extends Handler {
             expectedRPID: this.getAuthnHost(),
             credential: {
                 ...authenticator,
-                id: isoBase64URL.fromBuffer(authenticator.credentialID.buffer),
-                publicKey: authenticator.credentialPublicKey.buffer,
+                id: isoBase64URL.fromBuffer(new Uint8Array(authenticator.credentialID.buffer)),
+                publicKey: new Uint8Array(authenticator.credentialPublicKey.buffer),
             },
         }).catch(() => null);
         if (!verification?.verified) throw new ValidationError('authenticator');
@@ -312,7 +312,10 @@ class UserRegisterWithCodeHandler extends Handler {
         await token.del(code, token.TYPE_REGISTRATION);
         const [id, mailDomain] = this.tdoc.mail.split('@');
         const $set: any = this.tdoc.set || {};
-        if (mailDomain === 'qq.com' && !Number.isNaN(+id)) $set.avatar = `qq:${id}`;
+        if (mailDomain === 'qq.com' && !Number.isNaN(+id)) {
+            $set.avatar = `qq:${id}`;
+            $set.qq = `${id}`;
+        }
         if (this.session.viewLang) $set.viewLang = this.session.viewLang;
         if (Object.keys($set).length) await user.setById(uid, $set);
         if (Object.keys(this.tdoc.setInDomain || {}).length) await domain.setUserInDomain(domainId, uid, this.tdoc.setInDomain);

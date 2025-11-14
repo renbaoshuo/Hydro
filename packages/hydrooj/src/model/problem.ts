@@ -30,7 +30,7 @@ import DomainModel from './domain';
 import RecordModel from './record';
 import SolutionModel from './solution';
 import storage from './storage';
-import * as SystemModel from './system';
+import SystemModel from './system';
 
 export interface ProblemDoc extends Document { }
 export type Field = keyof ProblemDoc;
@@ -282,7 +282,6 @@ export class ProblemModel {
                 .then((items) => storage.del(items.map((item) => `problem/${domainId}/${docId}/${item.name}`))),
             bus.parallel('problem/delete', domainId, docId),
         ]);
-        await bus.emit('problem/del', domainId, docId);
         return !!res[0][0].deletedCount;
     }
 

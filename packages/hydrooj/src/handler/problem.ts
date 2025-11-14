@@ -32,7 +32,7 @@ import record from '../model/record';
 import * as setting from '../model/setting';
 import solution from '../model/solution';
 import storage from '../model/storage';
-import * as system from '../model/system';
+import system from '../model/system';
 import user from '../model/user';
 import {
     Handler, param, post, Query, query, route, Types,
@@ -105,10 +105,12 @@ export class ProblemMainHandler extends Handler {
     @param('limit', Types.PositiveInt, true)
     @param('pjax', Types.Boolean)
     @param('quick', Types.Boolean)
-    async get(domainId: string, page = 1, q = '', limit: number, pjax = false, quick = false) {
+    @param('sort', Types.Range(['default', 'recent']), true)
+    async get(domainId: string, page = 1, q = '', limit: number, pjax = false, quick = false, sortStrategy = 'default') {
         this.response.template = 'problem_main.html';
         if (!limit || limit > this.ctx.setting.get('pagination.problem') || page > 1) limit = this.ctx.setting.get('pagination.problem');
         this.queryContext.query = buildQuery(this.user);
+        if (sortStrategy === 'recent') this.queryContext.hint = 'basic';
         // eslint-disable-next-line ts/no-shadow
         const query = this.queryContext.query;
         const psdict = {};
@@ -122,7 +124,7 @@ export class ProblemMainHandler extends Handler {
         const category = parsed.category || [];
         const text = (parsed.text || []).join(' ');
         if (parsed.difficulty?.every((i) => Number.isSafeInteger(+i))) {
-            query.difficulty = { $in: parsed.difficulty.map(Number) };
+            query.difficulty = { $in: parsed.difficulty.flatMap((i) => +i === 0 ? [0, undefined] : [+i]) };
         }
         if (category.length) query.$and = category.map((tag) => ({ tag }));
         if (parsed.namespace?.length) {
@@ -145,11 +147,15 @@ export class ProblemMainHandler extends Handler {
         }
         const sort = this.queryContext.sort;
         await this.ctx.parallel('problem/list', query, this, sort);
+        const sortKey = ({
+            default: { sort: 1, docId: 1 },
+            recent: { docId: -1 },
+        } as const)[sortStrategy];
         let [pdocs, ppcount, pcount] = this.queryContext.fail
             ? [[], 0, 0]
             : await this.paginate(
                 problem.getMulti(domainId, query, quick ? ['title', 'pid', 'domainId', 'docId'] : undefined)
-                    .sort({ sort: 1, docId: 1 }).hint(this.queryContext.hint),
+                    .sort(sortKey).hint(this.queryContext.hint),
                 sort.length ? 1 : page, limit,
             );
         if (total) {
@@ -169,7 +175,7 @@ export class ProblemMainHandler extends Handler {
                 title: this.renderTitle(this.translate('problem_main')),
                 fragments: (await Promise.all([
                     this.renderHTML('partials/problem_list.html', {
-                        page, ppcount, pcount, pdocs, psdict, qs: q,
+                        page, ppcount, pcount, pdocs, psdict, qs: q, sort: sortStrategy,
                     }),
                     this.renderHTML('partials/problem_stat.html', { pcount, pcountRelation: this.queryContext.pcountRelation }),
                     this.renderHTML('partials/problem_lucky.html', { qs: q }),
@@ -184,6 +190,7 @@ export class ProblemMainHandler extends Handler {
                 pdocs,
                 psdict,
                 qs: q,
+                sort: sortStrategy,
             };
         }
     }
@@ -247,6 +254,7 @@ export class ProblemMainHandler extends Handler {
         for (const pid of pids) {
             // eslint-disable-next-line no-await-in-loop
             const pdoc = await problem.get(domainId, pid);
+            if (!pdoc) throw new ProblemNotFoundError(domainId, pid);
             if (!this.user.own(pdoc, PERM.PERM_EDIT_PROBLEM_SELF)) this.checkPerm(PERM.PERM_EDIT_PROBLEM);
             // eslint-disable-next-line no-await-in-loop
             await problem.edit(domainId, pid, { hidden: true });
@@ -259,6 +267,7 @@ export class ProblemMainHandler extends Handler {
         for (const pid of pids) {
             // eslint-disable-next-line no-await-in-loop
             const pdoc = await problem.get(domainId, pid);
+            if (!pdoc) throw new ProblemNotFoundError(domainId, pid);
             if (!this.user.own(pdoc, PERM.PERM_EDIT_PROBLEM_SELF)) this.checkPerm(PERM.PERM_EDIT_PROBLEM);
             // eslint-disable-next-line no-await-in-loop
             await problem.edit(domainId, pid, { hidden: false });
@@ -601,6 +610,7 @@ export class ProblemManageHandler extends ProblemDetailHandler {
 export class ProblemEditHandler extends ProblemManageHandler {
     async get() {
         this.response.body.additional_file = sortFiles(this.pdoc.additional_file || []);
+        this.response.body.statementLangs = this.ctx.i18n.langs(false);
         this.response.template = 'problem_edit.html';
     }
 
@@ -646,28 +656,15 @@ export class ProblemFilesHandler extends ProblemDetailHandler {
     notUsage = true;
 
     @param('d', Types.CommaSeperatedArray, true)
-    @param('pjax', Types.Boolean)
     @param('sidebar', Types.Boolean)
-    async get(domainId: string, d = ['testdata', 'additional_file'], pjax = false, sidebar = false) {
+    async get({ }, d = ['testdata', 'additional_file'], sidebar = false) {
         if (this.tdoc) throw new ContestNotEndedError();
-        this.response.body.testdata = d.includes('testdata') ? sortFiles(this.pdoc.data || []) : [];
+        this.response.body.testdata = sortFiles(this.pdoc.data || []);
+        this.response.body.additional_file = sortFiles(this.pdoc.additional_file || []);
         this.response.body.reference = this.pdoc.reference;
-        this.response.body.additional_file = d.includes('additional_file') ? sortFiles(this.pdoc.additional_file || []) : [];
-        if (pjax) {
-            const { testdata, additional_file } = this.response.body;
-            const owner = await user.getById(domainId, this.pdoc.owner);
-            const args = {
-                testdata, additional_file, pdoc: this.pdoc, owner_udoc: owner, sidebar, can_edit: true,
-            };
-            const tasks = [];
-            if (d.includes('testdata')) tasks.push(this.renderHTML('partials/problem_files.html', { ...args, filetype: 'testdata' }));
-            if (d.includes('additional_file')) tasks.push(this.renderHTML('partials/problem_files.html', { ...args, filetype: 'additional_file' }));
-            if (!sidebar) tasks.push(this.renderHTML('partials/problem-sidebar-information.html', args));
-            this.response.body = {
-                fragments: (await Promise.all(tasks)).map((i) => ({ html: i })),
-            };
-            this.response.template = '';
-        } else this.response.template = 'problem_files.html';
+        this.response.pjax = d.map((i) => ['partials/problem_files.html', { filetype: i, sidebar, can_edit: true }]);
+        if (!sidebar) this.response.pjax.push(['partials/problem-sidebar-information.html', {}]);
+        this.response.template = 'problem_files.html';
     }
 
     async post() {

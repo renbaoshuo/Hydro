@@ -2,7 +2,7 @@
 import cac from 'cac';
 import { Logger } from '@hydrooj/utils';
 import { Context, Service } from '../context';
-import * as system from '../model/system';
+import system from '../model/system';
 
 const argv = cac().parse();
 
@@ -24,7 +24,7 @@ export default class MigrationService extends Service {
     }
 
     async registerChannel(name: string, s: MigrationScript[]) {
-        if (this.called) logger.warn('MigrationService.registerChannel: called after doUpgrade');
+        if (this.called) logger.warn('MigrationService.registerChannel: called after doUpgrade with name: %s', name);
         this.channels[name] = s;
     }
 

@@ -25,7 +25,7 @@ export interface EventMap {
     'subscription/init': (h: ConnectionHandler<Context>, privileged: boolean) => VoidReturn;
     'subscription/subscribe': (channel: string, user: User, metadata: Record<string, string>) => VoidReturn;
     'subscription/enable': (
-        channel: string, h: ConnectionHandler<Context>, privileged: boolean, onDispose: (disposable: () => void) => void
+        channel: string, h: ConnectionHandler<Context>, privileged: boolean, onDispose: (disposable: () => void) => void,
     ) => VoidReturn;
 
     'app/watch/change': (path: string) => VoidReturn;
@@ -35,6 +35,7 @@ export interface EventMap {
     'database/config': () => VoidReturn;
 
     'system/setting': (args: Record<string, any>) => VoidReturn;
+    'system/setting-loaded': () => VoidReturn;
     'bus/broadcast': (event: keyof EventMap, payload: any, trace?: string) => VoidReturn;
     'monitor/update': (type: 'server' | 'judge', $set: any) => VoidReturn;
     'monitor/collect': (info: any) => VoidReturn;
@@ -60,7 +61,7 @@ export interface EventMap {
     'document/add': (doc: any) => VoidReturn;
     'document/set': <T extends keyof DocType>(
         domainId: string, docType: T, docId: DocType[T],
-        $set: any, $unset: OnlyFieldsOfType<DocType[T], any, true | '' | 1>
+        $set: any, $unset: OnlyFieldsOfType<DocType[T], any, true | '' | 1>,
     ) => VoidReturn;
 
     'discussion/before-add': (payload: Partial<DiscussionDoc>) => VoidReturn;
@@ -71,7 +72,6 @@ export interface EventMap {
     'problem/before-edit': (doc: Partial<ProblemDoc>, $unset: OnlyFieldsOfType<ProblemDoc, any, true | '' | 1>) => VoidReturn;
     'problem/edit': (doc: ProblemDoc) => VoidReturn;
     'problem/before-del': (domainId: string, docId: number) => VoidReturn;
-    'problem/del': (domainId: string, docId: number) => VoidReturn;
     'problem/list': (query: Filter<ProblemDoc>, handler: any, sort?: string[]) => VoidReturn;
     'problem/get': (doc: ProblemDoc, handler: any) => VoidReturn;
     'problem/delete': (domainId: string, docId: number) => VoidReturn;
@@ -84,6 +84,7 @@ export interface EventMap {
 
     'contest/before-add': (payload: Partial<Tdoc>) => VoidReturn;
     'contest/add': (payload: Partial<Tdoc>, id: ObjectId) => VoidReturn;
+    'contest/before-edit': (tdoc: Tdoc, $set: Partial<Tdoc>) => VoidReturn;
     'contest/edit': (payload: Tdoc) => VoidReturn;
     'contest/list': (query: Filter<Tdoc>, handler: any) => VoidReturn;
     'contest/scoreboard': (tdoc: Tdoc, rows: ScoreboardRow[], udict: BaseUserDict, pdict: ProblemDict) => VoidReturn;
