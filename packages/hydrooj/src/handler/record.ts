@@ -24,7 +24,7 @@ import { buildProjection, Time } from '../utils';
 import { ContestDetailBaseHandler } from './contest';
 import { postJudge } from './judge';
 
-class RecordListHandler extends ContestDetailBaseHandler {
+export class RecordListHandler extends ContestDetailBaseHandler {
     @param('page', Types.PositiveInt, true)
     @param('pid', Types.ProblemId, true)
     @param('tid', Types.ObjectId, true)
@@ -127,7 +127,7 @@ class RecordListHandler extends ContestDetailBaseHandler {
     }
 }
 
-class RecordDetailHandler extends ContestDetailBaseHandler {
+export class RecordDetailHandler extends ContestDetailBaseHandler {
     rdoc: RecordDoc;
 
     @param('rid', Types.ObjectId)
@@ -250,7 +250,7 @@ class RecordDetailHandler extends ContestDetailBaseHandler {
     }
 }
 
-class RecordMainConnectionHandler extends ConnectionHandler {
+export class RecordMainConnectionHandler extends ConnectionHandler {
     all = false;
     allDomain = false;
     tid: string;
@@ -332,10 +332,11 @@ class RecordMainConnectionHandler extends ConnectionHandler {
             if (rdoc.domainId !== this.args.domainId) return;
             if (!this.pretest && typeof rdoc.input === 'string') return;
             if (!this.all) {
+                if (!rdoc.contest && this.tid) return;
                 if (rdoc.contest && ![this.tid, '000000000000000000000000'].includes(rdoc.contest.toString())) return;
                 if (this.tid && rdoc.contest?.toString() !== '0'.repeat(24)) {
-                    if (contest.isLocked(this.tdoc) && !this.pretest) return;
-                    if (!contest.canShowSelfRecord.call(this, this.tdoc, true)) return;
+                    if (rdoc.uid !== this.user._id && !contest.canShowRecord.call(this, this.tdoc, true)) return;
+                    if (rdoc.uid === this.user._id && !contest.canShowSelfRecord.call(this, this.tdoc, true)) return;
                 }
             }
         }
@@ -346,7 +347,7 @@ class RecordMainConnectionHandler extends ConnectionHandler {
             user.getById(this.args.domainId, rdoc.uid),
             problem.get(rdoc.domainId, rdoc.pid),
         ]);
-        const tdoc = this.tid ? this.tdoc || await contest.get(rdoc.domainId, new ObjectId(this.tid)) : null;
+        const tdoc = this.tid ? this.tdoc : null;
         if (pdoc && !rdoc.contest) {
             if (!problem.canViewBy(pdoc, this.user)) pdoc = null;
             if (!this.user.hasPerm(PERM.PERM_VIEW_PROBLEM)) pdoc = null;
@@ -376,7 +377,7 @@ class RecordMainConnectionHandler extends ConnectionHandler {
     }
 }
 
-class RecordDetailConnectionHandler extends ConnectionHandler {
+export class RecordDetailConnectionHandler extends ConnectionHandler {
     pdoc: ProblemDoc;
     tdoc?: Tdoc;
     rid: string = '';

@@ -12,7 +12,7 @@ import { Context, Service } from '../context';
 import {
     BadRequestError, ContestNotAttendedError, ContestNotEndedError, ContestNotFoundError, ContestNotLiveError,
     ContestScoreboardHiddenError, FileLimitExceededError, FileUploadError,
-    InvalidTokenError, NotAssignedError, NotFoundError, PermissionError, ValidationError,
+    InvalidTokenError, MethodNotAllowedError, NotAssignedError, NotFoundError, PermissionError, ValidationError,
 } from '../error';
 import { FileInfo, ScoreboardConfig, Tdoc } from '../interface';
 import { PERM, PRIV, STATUS } from '../model/builtin';
@@ -127,6 +127,11 @@ export class ContestDetailBaseHandler extends Handler {
                 checker: () => this.tsdoc?.attend || contest.isDone(this.tdoc),
             },
             {
+                name: 'contest_print',
+                args: { tid, prefix: 'contest_print' },
+                checker: () => this.tdoc.allowPrint && (this.tsdoc?.attend || this.user.own(this.tdoc) || this.user.hasPerm(PERM.PERM_EDIT_CONTEST)),
+            },
+            {
                 name: 'contest_scoreboard',
                 args: { tid, prefix: 'contest_scoreboard' },
                 checker: () => contest.canShowScoreboard.call(this, this.tdoc, true),
@@ -195,6 +200,24 @@ export class ContestPrintHandler extends ContestDetailBaseHandler {
     async get() {
         this.response.body = { tdoc: this.tdoc };
         this.response.template = 'contest_print.html';
+    }
+
+    async post() {
+        if (this.args.operation) return;
+        if (this.args.file_contents && this.args.original_name) {
+            try {
+                await (this.postPrint as any)({
+                    ...this.args,
+                    title: this.args.original_name,
+                    content: Buffer.from(this.args.file_contents, 'base64').toString('utf-8'),
+                });
+                this.response.body = { success: true, output: '' };
+            } catch (e) {
+                this.response.body = { success: false, output: e.message };
+            } finally {
+                delete this.response.redirect;
+            }
+        } else throw new MethodNotAllowedError('POST');
     }
 
     @param('tid', Types.ObjectId)
@@ -310,7 +333,7 @@ export class ContestProblemListHandler extends ContestDetailBaseHandler {
         await this.limitRate('add_discussion', 3600, 60);
         await contest.addClarification(domainId, tid, this.user._id, content, this.request.ip, subject);
         if (!this.user.own(this.tdoc)) {
-            await message.send(1, this.tdoc.maintainer.concat(this.tdoc.owner), JSON.stringify({
+            await message.send(1, (this.tdoc.maintainer || []).concat(this.tdoc.owner), JSON.stringify({
                 message: 'Contest {0} has a new clarification about {1}, please go to contest clarifications page to reply.',
                 params: [this.tdoc.title, subject > 0 ? `#${this.tdoc.pids.indexOf(subject) + 1}` : 'the contest'],
                 url: this.url('contest_clarification', { tid }),
@@ -364,7 +387,7 @@ export class ContestEditHandler extends Handler {
     @param('duration', Types.Float)
     @param('title', Types.Title)
     @param('content', Types.Content)
-    @param('rule', Types.Range(Object.keys(contest.RULES).filter((i) => !contest.RULES[i].hidden)))
+    @param('rule', Types.String)
     @param('pids', Types.Content)
     @param('rated', Types.Boolean)
     @param('code', Types.String, true)
@@ -382,6 +405,7 @@ export class ContestEditHandler extends Handler {
         _code = '', autoHide = false, assign: string[] = [], lock: number = null,
         contestDuration: number = null, maintainer: number[] = [], allowViewCode = false, allowPrint = false, langs: string[] = [],
     ) {
+        if (!Object.keys(contest.RULES).includes(rule) || contest.RULES[rule].hidden) throw new ValidationError('rule');
         if (autoHide) this.checkPerm(PERM.PERM_EDIT_PROBLEM);
         const pids = _pids.replace(/，/g, ',').split(',').map((i) => +i).filter((i) => i);
         const beginAtMoment = moment.tz(`${beginAtDate} ${beginAtTime}`, this.user.timeZone);
@@ -462,8 +486,11 @@ export class ContestCodeHandler extends Handler {
     async get(domainId: string, tid: ObjectId, all: boolean) {
         await this.limitRate('contest_code', 60, 10);
         const [tdoc, tsdocs] = await contest.getAndListStatus(domainId, tid);
-        if (!this.user.own(tdoc) && !this.user.hasPriv(PRIV.PRIV_READ_RECORD_CODE)) {
-            this.checkPerm(PERM.PERM_READ_RECORD_CODE);
+        if (!this.user.own(tdoc)) {
+            if (!this.user.hasPriv(PRIV.PRIV_READ_RECORD_CODE)) {
+                this.checkPerm(PERM.PERM_READ_RECORD_CODE);
+            }
+            if (!contest.isDone(tdoc)) throw new ContestNotEndedError(domainId, tid);
         }
         if (!contest.canShowRecord.call(this, tdoc as any, true)) {
             throw new PermissionError(PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD);
@@ -731,7 +758,7 @@ export class ContestBalloonHandler extends ContestManagementBaseHandler {
     async postDone(domainId: string, tid: ObjectId, bid: ObjectId) {
         const balloon = await contest.getBalloon(domainId, tid, bid);
         if (!balloon) throw new ValidationError('balloon');
-        if (balloon.sent) throw new ValidationError('balloon', null, 'Balloon already sent');
+        if (balloon.sent) throw new ValidationError('Balloon already sent');
         await contest.updateBalloon(domainId, tid, bid, { sent: this.user._id, sentAt: new Date() });
         this.back();
     }
@@ -758,8 +785,10 @@ export class ContestScoreboardHandler extends ContestDetailBaseHandler {
     @param('tid', Types.ObjectId)
     @param('view', Types.String, true)
     async get(domainId: string, tid: ObjectId, viewId = 'default') {
-        if (!contest.canShowScoreboard.call(this, this.tdoc, true)) throw new ContestScoreboardHiddenError(tid);
-        if (contest.isNotStarted(this.tdoc)) throw new ContestNotLiveError(domainId, tid);
+        if (!this.user.own(this.tdoc)) {
+            if (!contest.canShowScoreboard.call(this, this.tdoc, true)) throw new ContestScoreboardHiddenError(tid);
+            if (contest.isNotStarted(this.tdoc)) throw new ContestNotLiveError(domainId, tid);
+        }
         const view = this.ctx.scoreboard.getView(viewId);
         if (!view) throw new NotFoundError(`View ${viewId} not found`);
         const args = {};
@@ -846,6 +875,8 @@ export async function apply(ctx: Context) {
     ctx.Route('contest_problemlist', '/contest/:tid/problems', ContestProblemListHandler, PERM.PERM_VIEW_CONTEST);
     ctx.Route('contest_edit', '/contest/:tid/edit', ContestEditHandler, PERM.PERM_VIEW_CONTEST);
     ctx.Route('contest_print', '/contest/:tid/print', ContestPrintHandler, PERM.PERM_VIEW_CONTEST);
+    // Support for DOMJudge printfile
+    ctx.Route('contest_print_alt', '/contest/:tid/api/printing/team', ContestPrintHandler, PERM.PERM_VIEW_CONTEST);
     ctx.Route('contest_manage', '/contest/:tid/management', ContestManagementHandler);
     ctx.Route('contest_clarification', '/contest/:tid/clarification', ContestClarificationHandler);
     ctx.Route('contest_code', '/contest/:tid/code', ContestCodeHandler, PERM.PERM_VIEW_CONTEST);

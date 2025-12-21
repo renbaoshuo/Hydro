@@ -519,7 +519,10 @@ export class ProblemSubmitHandler extends ProblemDetailHandler {
                 await storage.put(`submission/${this.user._id}/${id}`, file.filepath, this.user._id);
                 files.code = `${this.user._id}/${id}#${file.originalFilename}`;
             }
-        } else if (code.length > lengthLimit) throw new ValidationError('code');
+        } else {
+            code = code.replace(/\r\n/g, '\n');
+            if (code.length > lengthLimit) throw new ValidationError('code');
+        }
         const rid = await record.add(
             domainId, this.pdoc.docId, this.user._id, lang, code, true,
             pretest ? { input, type: 'pretest' } : { contest: tid, files, type: 'judge' },
@@ -922,12 +925,14 @@ export class ProblemSolutionHandler extends ProblemDetailHandler {
 
     @param('psid', Types.ObjectId)
     async postUpvote(domainId: string, psid: ObjectId) {
+        this.checkPerm(PERM.PERM_VOTE_PROBLEM_SOLUTION);
         const psdoc = await solution.vote(domainId, psid, this.user._id, 1);
         this.back({ vote: psdoc.vote, user_vote: 1 });
     }
 
     @param('psid', Types.ObjectId)
     async postDownvote(domainId: string, psid: ObjectId) {
+        this.checkPerm(PERM.PERM_VOTE_PROBLEM_SOLUTION);
         const psdoc = await solution.vote(domainId, psid, this.user._id, -1);
         this.back({ vote: psdoc.vote, user_vote: -1 });
     }
@@ -983,6 +988,7 @@ export class ProblemStatisticsHandler extends ProblemDetailHandler {
 
 export class ProblemCreateHandler extends Handler {
     async get() {
+        this.response.body.statementLangs = this.ctx.i18n.langs(false);
         this.response.template = 'problem_edit.html';
         this.response.body = {
             page_name: 'problem_create',
