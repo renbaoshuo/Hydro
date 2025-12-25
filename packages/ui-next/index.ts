@@ -7,7 +7,7 @@ import { createServer, type Plugin } from 'vite';
 import { } from '@hydrooj/framework';
 import { Context, getNodes } from 'hydrooj';
 
-const INJECT_MARKER = '{ "HYDRO_INJECTED": false, "name": "", "args": {} }';
+const INJECT_MARKER = '<!-- __HYDRO_INJECTION__DO_NOT_REMOVE_THIS__ -->';
 
 function hydroPlugins(): Plugin {
     const virtualModuleId = 'virtual:hydro-plugins';
@@ -75,12 +75,12 @@ export async function apply(ctx: Context) {
         asFallback: false,
         priority: 100,
         async render(name, args, context) {
-            const htmlToRender = html.replace(INJECT_MARKER, JSON.stringify({
+            const htmlToRender = html.replace(INJECT_MARKER, `<script id="__HYDRO_INJECTION__" type="application/json">${JSON.stringify({
                 HYDRO_INJECTED: true,
                 name,
                 args,
                 url: context.handler.context.req.url,
-            }));
+            })}</script>`);
             return await vite.transformIndexHtml(context.handler.context.req.url!, htmlToRender);
         },
     });
