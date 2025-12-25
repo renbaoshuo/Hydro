@@ -3,11 +3,34 @@ import path from 'path';
 import importMetaUrlPlugin from '@chialab/esbuild-plugin-meta-url';
 import react from '@vitejs/plugin-react-swc';
 import c2k from 'koa2-connect/ts';
-import { createServer } from 'vite';
+import { createServer, type Plugin } from 'vite';
 import { } from '@hydrooj/framework';
-import { Context } from 'hydrooj';
+import { Context, getNodes } from 'hydrooj';
 
 const INJECT_MARKER = '{ "HYDRO_INJECTED": false, "name": "", "args": {} }';
+
+function hydroPlugins(): Plugin {
+    const virtualModuleId = 'virtual:hydro-plugins';
+    const resolvedVirtualModuleId = `\0${virtualModuleId}`;
+
+    return {
+        name: 'hydro-plugins',
+        resolveId(id) {
+            if (id === virtualModuleId) {
+                return resolvedVirtualModuleId;
+            }
+        },
+        load(id) {
+            if (id === resolvedVirtualModuleId) {
+                const plugins = getNodes('Route');
+                if (!plugins) return 'export default [];';
+                const imports = plugins.map((p, i) => `import plugin${i} from '${p.args.entry}';`).join('\n');
+                const exports = `export default [${plugins.map((p, i) => `plugin${i}`).join(', ')}];`;
+                return `${imports}\n${exports}`;
+            }
+        },
+    };
+}
 
 export async function apply(ctx: Context) {
     if (process.env.HYDRO_CLI) return;
@@ -26,7 +49,7 @@ export async function apply(ctx: Context) {
         appType: 'custom',
         root: __dirname,
         base: '/',
-        plugins: [react()],
+        plugins: [react(), hydroPlugins()],
         optimizeDeps: {
             esbuildOptions: {
                 plugins: [
