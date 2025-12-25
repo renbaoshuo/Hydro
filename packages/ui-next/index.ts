@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import importMetaUrlPlugin from '@codingame/esbuild-import-meta-url-plugin';
+import importMetaUrlPlugin from '@chialab/esbuild-plugin-meta-url';
 import react from '@vitejs/plugin-react-swc';
 import c2k from 'koa2-connect/ts';
 import { createServer } from 'vite';
