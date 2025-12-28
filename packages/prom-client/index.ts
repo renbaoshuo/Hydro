@@ -63,6 +63,7 @@ export function apply(ctx: Context) {
                 const endpoint = `${prefix}metrics/job/hydro-web/instance/${encodeURIComponent(hostname())}:${process.env.NODE_APP_INSTANCE}`;
                 let req = superagent.post(endpoint);
                 if (name) req = req.auth(name, pass, { type: 'basic' });
+                req.type('text/plain; version=0.0.4; charset=utf-8');
                 await req.send(await registry.metrics());
             } else ctx.broadcast('metrics', `${hostname()}/${process.env.NODE_APP_INSTANCE}`, await registry.getMetricsAsJSON());
             pushError = '';
