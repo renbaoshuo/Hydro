@@ -2,7 +2,7 @@ import path from 'path';
 import PQueue from 'p-queue';
 import superagent from 'superagent';
 import WebSocket from 'ws';
-import type { LangConfig } from '@hydrooj/common';
+import type { FileInfo, LangConfig } from '@hydrooj/common';
 import { fs, pipeRequest } from '@hydrooj/utils';
 import * as sysinfo from '@hydrooj/utils/lib/sysinfo';
 import type { JudgeResultBody } from 'hydrooj';
@@ -12,6 +12,7 @@ import { compilerVersions, stackSize as getStackSize } from '../info';
 import { Session } from '../interface';
 import log from '../log';
 import { JudgeTask } from '../task';
+import { checkCache, Lock, saveCacheMeta } from '../utils';
 
 function removeNixPath(text: string) {
     return text.replace(/\/nix\/store\/[a-z0-9]{32}-/g, '/nix/');
@@ -132,6 +133,30 @@ export default class Hydro implements Session {
         return { next, end };
     }
 
+    async prefetch(source: string, files: FileInfo[]) {
+        const host = this.config.host || 'local';
+        const filePath = path.join(getConfig('cache_dir'), host, source);
+        await Lock.acquire(filePath);
+        try {
+            await fs.ensureDir(filePath);
+            if (!files?.length) return;
+            const { version, filenames, allFilesToRemove } = await checkCache(filePath, files);
+            await Promise.all(allFilesToRemove.map((name) => fs.remove(path.join(filePath, name))));
+            if (filenames.length) {
+                log.info(`Prefetching problem data: ${host}/${source}`);
+                await this.fetchFile(source, Object.fromEntries(
+                    files.filter((i) => filenames.includes(i.name))
+                        .map((i) => [i.name, path.join(filePath, i.name)]),
+                ));
+            }
+            await saveCacheMeta(filePath, version, !!(allFilesToRemove.length || filenames.length));
+        } catch (e) {
+            log.warn('Prefetch Fail: %s %o %o', source, files, e);
+        } finally {
+            Lock.release(filePath);
+        }
+    }
+
     async consume(queue: PQueue) {
         log.info('正在连接 %sjudge/conn', this.config.server_url);
         this.ws = new WebSocket(`${this.config.server_url.replace(/^http/i, 'ws')}judge/conn`, {
@@ -167,6 +192,7 @@ export default class Hydro implements Session {
                 });
             }
             if (request.task) queue.add(() => new JudgeTask(this, request.task).handle().catch((e) => log.error(e)));
+            if (request.prefetch) queue.add(() => this.prefetch(request.prefetch.source, request.prefetch.files));
         });
         this.ws.on('close', (data, reason) => {
             log.warn(`[${this.config.host}] Websocket 断开:`, data, reason.toString());

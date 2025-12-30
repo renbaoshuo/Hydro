@@ -17,7 +17,9 @@ import { Logger } from './log';
 import {
     CopyIn, CopyInFile, get, PreparedFile, runQueued,
 } from './sandbox';
-import { compilerText, Lock, md5 } from './utils';
+import {
+    checkCache, compilerText, Lock, md5, saveCacheMeta,
+} from './utils';
 
 const logger = new Logger('judge');
 
@@ -125,21 +127,10 @@ export class JudgeTask {
         try {
             await fs.ensureDir(filePath);
             if (!files?.length) throw new FormatError('Problem data not found.');
-            let etags: Record<string, string> = {};
-            try {
-                etags = JSON.parse(await fs.readFile(join(filePath, 'etags'), 'utf-8'));
-            } catch (e) { /* ignore */ }
-            this.compileCache = etags['*cache'] as any || {};
-            delete etags['*cache'];
-            const version = {};
-            const filenames = [];
-            const allFiles = new Set<string>();
-            for (const file of files) {
-                allFiles.add(file.name);
-                version[file.name] = file.etag + file.lastModified;
-                if (etags[file.name] !== file.etag + file.lastModified) filenames.push(file.name);
-            }
-            const allFilesToRemove = Object.keys(etags).filter((name) => !allFiles.has(name) && fs.existsSync(join(filePath, name)));
+            const {
+                version, filenames, allFilesToRemove, cache,
+            } = await checkCache(filePath, files);
+            this.compileCache = cache as any;
             await Promise.all(allFilesToRemove.map((name) => fs.remove(join(filePath, name))));
             if (filenames.length) {
                 span.setAttribute('syncedFiles', filenames.length);
@@ -151,10 +142,7 @@ export class JudgeTask {
                 ));
                 this.compileCache = {};
             }
-            if (allFilesToRemove.length || filenames.length) {
-                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
-            }
-            await fs.writeFile(join(filePath, 'lastUsage'), Date.now().toString());
+            await saveCacheMeta(filePath, version, !!(allFilesToRemove.length || filenames.length));
             return filePath;
         } catch (e) {
             span.recordException(e);

@@ -4,9 +4,7 @@ import yaml from 'js-yaml';
 import { omit } from 'lodash';
 import { ObjectId } from 'mongodb';
 import sanitize from 'sanitize-filename';
-import {
-    JudgeMeta, JudgeResultBody, ProblemConfigFile, TestCase,
-} from '@hydrooj/common';
+import { FileInfo, JudgeMeta, JudgeResultBody, ProblemConfigFile, TestCase } from '@hydrooj/common';
 import { sleep } from '@hydrooj/utils';
 import { Context } from '../context';
 import {
@@ -278,6 +276,11 @@ export class JudgeConnectionHandler extends ConnectionHandler {
     @subscribe('system/setting')
     sendLanguageConfig() {
         this.send({ language: setting.langs });
+    }
+
+    @subscribe('judge/prefetch')
+    async prefetch(data: { source: string, files: FileInfo[] }) {
+        this.send({ prefetch: data });
     }
 
     async newTask(t: Task) {
