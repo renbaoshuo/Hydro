@@ -32,7 +32,7 @@ export class JudgeTask {
     rid: string;
     lang: string;
     code: CopyInFile;
-    input?: string;
+    input?: string[];
     finished: boolean = false;
     clean: (() => Promise<any>)[] = [];
     data: FileInfo[];
@@ -53,7 +53,7 @@ export class JudgeTask {
         logger.debug('%o', request);
     }
 
-    private startChildSpan(name: string, attributes?: Record<string, any>) {
+    startChildSpan(name: string, attributes?: Record<string, any>) {
         const span = this.tracer.startSpan(name, { attributes }, this.mainContext);
         span[Symbol.dispose] = () => span.end();
         return span as typeof span & { [Symbol.dispose]: () => void };
@@ -69,7 +69,7 @@ export class JudgeTask {
             this.source = this.request.source;
             this.meta = this.request.meta;
             this.files = this.request.files;
-            this.input = this.request.input;
+            this.input = Array.isArray(this.request.input) ? this.request.input : [this.request.input || ''];
             let tid = this.request.contest?.toString() || '';
             if (tid === '000000000000000000000000') tid = '';
             this.env = {
@@ -133,13 +133,14 @@ export class JudgeTask {
             this.compileCache = cache as any;
             await Promise.all(allFilesToRemove.map((name) => fs.remove(join(filePath, name))));
             if (filenames.length) {
-                span.setAttribute('syncedFiles', filenames.length);
+                span.setAttribute('files', filenames);
                 logger.info(`Getting problem data: ${this.session?.config.host || 'local'}/${source}`);
                 this.next({ message: 'Syncing testdata, please wait...' });
+                this.mainContext = trace.setSpan(context.active(), span);
                 await this.session.fetchFile(source, Object.fromEntries(
                     files.filter((i) => filenames.includes(i.name))
                         .map((i) => [i.name, join(filePath, i.name)]),
-                ));
+                ), this);
                 this.compileCache = {};
             }
             await saveCacheMeta(filePath, version, !!(allFilesToRemove.length || filenames.length));
@@ -149,6 +150,7 @@ export class JudgeTask {
             logger.warn('CacheOpen Fail: %s %o %o', source, files, e);
             throw e;
         } finally {
+            this.mainContext = trace.setSpan(context.active(), this.span);
             Lock.release(filePath);
         }
     }
@@ -156,7 +158,7 @@ export class JudgeTask {
     async doSubmission() {
         this.folder = await this.cacheOpen(this.source, this.data);
         if (this.files?.code) {
-            const target = await this.session.fetchFile(null, { [this.files.code]: '' });
+            const target = await this.session.fetchFile(null, { [this.files.code]: '' }, this);
             this.code = { src: target };
             this.clean.push(() => fs.remove(target));
         }
