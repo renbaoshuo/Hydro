@@ -1,5 +1,6 @@
 import Schema from 'schemastery';
 import { Context } from '../context';
+import { ObjectID } from '../libs';
 import problem from '../model/problem';
 import bus from '../service/bus';
 
@@ -26,7 +27,7 @@ export const apply = (ctx: Context) => ctx.addScript(
                 continue;
             }
             report({ message: `${target}: Prefetching ${files.length} files` });
-            bus.broadcast('judge/prefetch', `${domainId}/${pid}`, files);
+            bus.broadcast('judge/prefetch', new ObjectID(), domainId, pdoc.docId, files);
         }
         return true;
     },

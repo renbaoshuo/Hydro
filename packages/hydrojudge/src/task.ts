@@ -17,9 +17,7 @@ import { Logger } from './log';
 import {
     CopyIn, CopyInFile, get, PreparedFile, runQueued,
 } from './sandbox';
-import {
-    checkCache, compilerText, Lock, md5, saveCacheMeta,
-} from './utils';
+import { compilerText, Lock, md5 } from './utils';
 
 const logger = new Logger('judge');
 
@@ -62,12 +60,30 @@ export class JudgeTask {
     async handle() {
         const host = this.session.config.host || 'local';
         try {
-            this.rid = this.request.rid.toString();
-            this.lang = this.request.lang;
-            this.code = { content: this.request.code };
             this.data = this.request.data;
             this.source = this.request.source;
             this.meta = this.request.meta;
+
+            if (this.request.type === 'prefetch') {
+                this.rid = this.request.rid.toString();
+                this.lang = 'hydro.prefetch';
+                this.next = () => { };
+                this.end = () => { };
+                this.span.setAttributes({
+                    host,
+                    rid: this.rid,
+                    source: this.source,
+                    lang: this.lang,
+                    tid: '',
+                });
+                logger.info('Prefetch: %s/%s', host, this.source);
+                await this.cacheOpen(this.source, this.data);
+                return;
+            }
+
+            this.rid = this.request.rid.toString();
+            this.lang = this.request.lang;
+            this.code = { content: this.request.code };
             this.files = this.request.files;
             this.input = Array.isArray(this.request.input) ? this.request.input : [this.request.input || ''];
             let tid = this.request.contest?.toString() || '';
@@ -127,10 +143,21 @@ export class JudgeTask {
         try {
             await fs.ensureDir(filePath);
             if (!files?.length) throw new FormatError('Problem data not found.');
-            const {
-                version, filenames, allFilesToRemove, cache,
-            } = await checkCache(filePath, files);
-            this.compileCache = cache as any;
+            let etags: Record<string, string> = {};
+            try {
+                etags = JSON.parse(await fs.readFile(join(filePath, 'etags'), 'utf-8'));
+            } catch (e) { /* ignore */ }
+            this.compileCache = etags['*cache'] as any || {};
+            delete etags['*cache'];
+            const version = {};
+            const filenames = [];
+            const allFiles = new Set<string>();
+            for (const file of files) {
+                allFiles.add(file.name);
+                version[file.name] = file.etag + file.lastModified;
+                if (etags[file.name] !== file.etag + file.lastModified) filenames.push(file.name);
+            }
+            const allFilesToRemove = Object.keys(etags).filter((name) => !allFiles.has(name) && fs.existsSync(join(filePath, name)));
             await Promise.all(allFilesToRemove.map((name) => fs.remove(join(filePath, name))));
             if (filenames.length) {
                 span.setAttribute('files', filenames);
@@ -143,7 +170,10 @@ export class JudgeTask {
                 ), this);
                 this.compileCache = {};
             }
-            await saveCacheMeta(filePath, version, !!(allFilesToRemove.length || filenames.length));
+            if (allFilesToRemove.length || filenames.length) {
+                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
+            }
+            await fs.writeFile(join(filePath, 'lastUsage'), Date.now().toString());
             return filePath;
         } catch (e) {
             span.recordException(e);

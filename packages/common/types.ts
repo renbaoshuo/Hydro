@@ -118,7 +118,7 @@ export interface RecordPayload extends RecordJudgeInfo {
 
 export interface JudgeRequest extends Omit<RecordPayload, 'testCases'> {
     priority: number;
-    type: 'judge' | 'generate';
+    type: 'judge' | 'generate' | 'prefetch';
     rid: string;
     config: ProblemConfigFile;
     meta: JudgeMeta;

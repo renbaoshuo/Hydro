@@ -279,8 +279,26 @@ export class JudgeConnectionHandler extends ConnectionHandler {
     }
 
     @subscribe('judge/prefetch')
-    prefetch(source: string, files: FileInfo[]) {
-        this.send({ prefetch: { source, files } });
+    prefetch(_id: ObjectId, domainId: string, pid: number, files: FileInfo[]) {
+        this.send({
+            task: {
+                domainId,
+                pid,
+                uid: 1,
+                lang: 'hydro.prefetch',
+                code: '',
+                rejudged: false,
+                source: '',
+                priority: 0,
+                type: 'prefetch',
+                rid: _id,
+                // not used by prefetch task
+                config: {} as any,
+                meta: {} as any,
+                data: files,
+                trusted: false,
+            },
+        });
     }
 
     async newTask(t: Task) {
