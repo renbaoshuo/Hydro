@@ -279,8 +279,8 @@ export class JudgeConnectionHandler extends ConnectionHandler {
     }
 
     @subscribe('judge/prefetch')
-    async prefetch(data: { source: string, files: FileInfo[] }) {
-        this.send({ prefetch: data });
+    prefetch(source: string, files: FileInfo[]) {
+        this.send({ prefetch: { source, files } });
     }
 
     async newTask(t: Task) {

@@ -99,7 +99,7 @@ export interface EventMap {
     'record/change': (rdoc: RecordDoc, $set?: any, $push?: any, body?: any) => void;
     'record/judge': (rdoc: RecordDoc, updated: boolean, pdoc?: ProblemDoc, updater?: any) => VoidReturn;
 
-    'judge/prefetch': (data: { source: string, files: FileInfo[] }) => void;
+    'judge/prefetch': (source: string, files: FileInfo[]) => void;
 }
 
 export function apply(ctx: Context) {

@@ -1,6 +1,7 @@
 import Schema from 'schemastery';
 import { Context } from '../context';
 import problem from '../model/problem';
+import bus from '../service/bus';
 
 export const apply = (ctx: Context) => ctx.addScript(
     'prefetchTestdata', 'prefetch testdata to judge clients',
@@ -25,10 +26,7 @@ export const apply = (ctx: Context) => ctx.addScript(
                 continue;
             }
             report({ message: `${target}: Prefetching ${files.length} files` });
-            ctx.broadcast('judge/prefetch', {
-                source: `${domainId}/${pid}`,
-                files,
-            });
+            bus.broadcast('judge/prefetch', `${domainId}/${pid}`, files);
         }
         return true;
     },
