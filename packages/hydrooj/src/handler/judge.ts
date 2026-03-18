@@ -97,6 +97,7 @@ export class JudgeResultCallbackContext {
             }, { upsert: true });
         } else {
             const rdoc = await record.update(this.task.domainId, new ObjectId(this.task.rid as string), $set, $push, $unset, $inc);
+            body.key = 'next';
             if (rdoc) this.ctx.broadcast('record/change', rdoc, $set, $push, body);
         }
     }
@@ -105,6 +106,7 @@ export class JudgeResultCallbackContext {
         const {
             $set, $push, $unset, $inc,
         } = processPayload(body);
+        body.key = 'next';
         const rdoc = await record.update(domainId, rid, $set, $push, $unset, $inc);
         if (rdoc) app.broadcast('record/change', rdoc, $set, $push, body);
     }
@@ -154,6 +156,7 @@ export class JudgeResultCallbackContext {
 
         const rdoc = await record.update(this.task.domainId, new ObjectId(this.task.rid as string), $set, $push, $unset);
         if (rdoc) {
+            body.key = 'end';
             bus.broadcast('record/change', rdoc, null, null, body); // trigger a full update
             await JudgeResultCallbackContext.postJudge(rdoc, this);
         }
@@ -167,6 +170,7 @@ export class JudgeResultCallbackContext {
         $set.judger = body.judger ?? 1;
         const rdoc = await record.update(domainId, rid, $set, $push, $unset);
         if (rdoc) {
+            body.key = 'end';
             app.broadcast('record/change', rdoc, null, null, body); // trigger a full update
             await JudgeResultCallbackContext.postJudge(rdoc);
         }

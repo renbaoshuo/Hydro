@@ -111,6 +111,24 @@ Hydro 用户群：1085853538
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
 
+## Hydro 5.0.0-beta.18 / UI 4.58.0-beta.19
+
+- ui: problemconfig: 修复子任务测试点拖拽
+- ui: problemconfig: 修复子任务依赖设置
+- ui: 调整默认编译空间设置
+- core: 修复重载设置导致设置项复制的问题
+- core: 修复题解被赞数量显示
+- ui: 修复题解区长数学公式显示
+
+## Hydro 5.0.0-beta.17 / UI 4.58.0-beta.18
+
+- ui: 自动折叠过长的题解内容
+- core: 添加比赛功能白名单
+- core: 支持多文件 patch
+- core: buildContent: 支持 background 字段
+- core: 排名：排除不在本域内的用户
+- core: 其他 bug 修复
+
 ## Hydro 5.0.0-beta.16 / UI 4.58.0-beta.17
 
 - core: 修复繁体中文 i18n 自动检测
