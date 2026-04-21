@@ -183,12 +183,15 @@ export const request = {
   },
 };
 
+let transition: ViewTransition | null = null;
+
 export async function withTransitionCallback(callback: () => (Promise<void> | void)) {
-  // @ts-ignore
-  if (!document.startViewTransition) return callback?.();
-  // @ts-ignore
-  const transition = document.startViewTransition(callback);
-  return await transition.finished;
+  if (!document.startViewTransition || document.visibilityState === 'hidden') return callback?.();
+  transition?.skipTransition?.();
+  transition = document.startViewTransition(callback);
+  await transition.finished;
+  transition = null;
+  return null;
 }
 
 export async function setTemporaryViewTransitionNames(entries, vtPromise: Promise<void>) {
