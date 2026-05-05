@@ -42,6 +42,7 @@ export const JudgeSettings = Schema.object({
         samplePercentage: Schema.number().description('Sample percentage').default(0).min(0).max(1),
         attributes: Schema.any().description('Tracing attributes').default({}),
     }),
+    pipe_proxy: Schema.boolean().description('Enable pipe proxy').default(true),
     detail: Schema.union([
         Schema.const('full'),
         Schema.const('case'),
