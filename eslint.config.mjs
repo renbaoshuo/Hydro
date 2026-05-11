@@ -69,7 +69,6 @@ const config = react({
         '**/plugins/**/*.page.{ts,js,tsx,jsx}',
         'packages/ui-default/**/*.{ts,tsx,js,jsx}',
         'packages/ui-next/src/**/*.{ts,tsx,js,jsx}',
-        'plugins/fzu-hydro-ui/src/**/*.{ts,tsx,js,jsx}',
     ],
 
     languageOptions: {
