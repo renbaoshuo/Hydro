@@ -15,7 +15,7 @@ type KnownHandlerEvents = {
 
 type HandlerEvents =
     Record<`handler/${HookType}`, (thisArg: Handler) => VoidReturn>
-    & Record<`connection/${'create' | 'active' | 'close'}`, (thisArg: any) => VoidReturn>;
+    & Record<`connection/${'create' | 'active' | 'close'}`, (thisArg: ConnectionHandler) => VoidReturn>;
 
 export type VoidReturn = Promise<any> | any;
 export type HookType = 'before-prepare' | 'before' | 'before-operation' | 'after' | 'finish';

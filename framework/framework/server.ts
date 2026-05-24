@@ -104,6 +104,7 @@ export type KoaContext = Koa.Context & {
     request: Koa.Request & { body: any, files: Files };
     session: Record<string, any>;
     holdFiles: (string | File)[];
+    __timers?: Record<string, number>;
 };
 
 interface RendererContext {
@@ -312,29 +313,33 @@ export class NotFoundHandler extends Handler {
     all() { }
 }
 
+type LayerFunc = Koa.Middleware<Koa.DefaultState, Koa.DefaultContext>;
+type UserLayerFunc = Koa.Middleware<Koa.DefaultState, KoaContext>;
+
 export interface LayerEntry {
     name: string;
-    func: (ctx: any, next: () => Promise<void>) => any;
+    func: LayerFunc;
 }
 
-function executeMiddlewareStack(context: any, middlewares: LayerEntry[]): Promise<void> {
+function executeMiddlewareStack(context: Koa.Context, middlewares: LayerEntry[]): Promise<void> {
+    const ctx = context as KoaContext;
     let index = -1;
-    context.__timers ||= {};
-    function dispatch(i) {
+    ctx.__timers ||= {};
+    function dispatch(i: number) {
         if (i <= index) return Promise.reject(new Error('next() called multiple times'));
         index = i;
         if (!middlewares[i]) return Promise.resolve();
         const name = middlewares[i].name;
         const fn = middlewares[i].func;
-        context.__timers[`${name}.start`] = Date.now();
+        ctx.__timers[`${name}.start`] = Date.now();
         try {
-            return Promise.resolve(fn(context, dispatch.bind(null, i + 1))).finally(() => {
-                context.__timers[`${name}.end`] = Date.now();
+            return Promise.resolve(fn(ctx, dispatch.bind(null, i + 1))).finally(() => {
+                ctx.__timers[`${name}.end`] = Date.now();
             });
         } catch (e) {
             return Promise.reject(e);
         } finally {
-            context.__timers[`${name}.end`] = Date.now();
+            ctx.__timers[`${name}.end`] = Date.now();
         }
     }
     return dispatch(0);
@@ -480,7 +485,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         }
         this.router.use((c, next) => executeMiddlewareStack(c, [
             ...this.handlerLayers,
-            { name: 'logic', func: next },
+            { name: 'logic', func: (_ctx, _next) => next() },
         ]).catch(console.error));
         this.server.use((c) => executeMiddlewareStack(c, [
             ...this.serverLayers,
@@ -501,7 +506,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 } catch (e) { }
             });
             socket.pause();
-            const KoaContext: any = koa.createContext(request, {} as any);
+            const KoaContext = koa.createContext(request, {} as http.ServerResponse) as KoaContext;
             await executeMiddlewareStack(KoaContext, this.wsLayers);
             for (const manager of router.wsStack) {
                 if (manager.accept(socket, request, KoaContext)) return;
@@ -531,7 +536,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         });
     }
 
-    private async handleHttp(ctx: KoaContext, HandlerClass, checker, savedContext: CordisContext) {
+    private async handleHttp(rawCtx: Koa.Context, HandlerClass, checker, savedContext: CordisContext) {
+        const ctx = rawCtx as KoaContext;
         const { args } = ctx.HydroContext;
         Object.assign(args, ctx.params);
         await using sub = await forkContextWithScope(savedContext);
@@ -547,9 +553,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 ? `_${ctx.request.body.operation}`.replace(/_([a-z])/g, (s) => s[1].toUpperCase())
                 : '';
 
-            // FIXME: should pass type check
-            await (this.ctx.parallel as any)('handler/create', h, 'http');
-            await (this.ctx.parallel as any)('handler/create/http', h);
+            await this.ctx.parallel('handler/create', h, 'http');
+            await this.ctx.parallel('handler/create/http', h);
 
             if (checker) checker.call(h);
             if (typeof h.all !== 'function') {
@@ -602,9 +607,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             }
         } catch (e) {
             try {
-                // FIXME: should pass type check
-                await (this.ctx.serial as any)(`handler/error/${name}`, h, e);
-                await (this.ctx.serial as any)('handler/error', h, e);
+                await this.ctx.serial(`handler/error/${name}`, h, e);
+                await this.ctx.serial('handler/error', h, e);
                 await h.onerror(e);
             } catch (err) {
                 logger.error(err);
@@ -617,7 +621,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         }
     }
 
-    private async handleWS(ctx: KoaContext, HandlerClass, checker, conn?, layer?, savedContext?: CordisContext) {
+    private async handleWS(rawCtx: Koa.Context, HandlerClass, checker, conn?, layer?, savedContext?: CordisContext) {
+        const ctx = rawCtx as KoaContext;
         const { args } = ctx.HydroContext;
         const sub = await forkContextWithScope(savedContext);
         const h = new HandlerClass(ctx, sub.ctx);
@@ -656,8 +661,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             try {
                 try {
                     if (err) await h.onerror(err);
-                    // FIXME: should pass type check
-                    else (this.ctx.emit as any)('connection/close', h);
+                    else this.ctx.emit('connection/close', h);
                 } finally {
                     h.active = false;
                     if (layer) layer.clients.delete(conn);
@@ -671,9 +675,8 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         };
 
         try {
-            // FIXME: should pass type check
-            await (this.ctx.parallel as any)('handler/create', h, 'ws');
-            await (this.ctx.parallel as any)('handler/create/ws', h);
+            await this.ctx.parallel('handler/create', h, 'ws');
+            await this.ctx.parallel('handler/create/ws', h);
             checker.call(h);
             if (args.shorty) h.resetCompression();
             if (h._prepare) await h._prepare(args);
@@ -711,8 +714,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                     }
                 };
             } else ctx.body = stream;
-            // FIXME: should pass type check
-            await (this.ctx.parallel as any)('connection/active', h as any);
+            await this.ctx.parallel('connection/active', h);
             h.active = true;
             if (layer) {
                 if (conn.readyState === conn.OPEN) {
@@ -773,15 +775,15 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             : this.ctx;
         const checker = Checker(permPrivChecker);
         if (type === 'route') {
-            router.all(routeName, path, (ctx) => this.handleHttp(ctx as any, HandlerClass, checker, savedContext));
+            router.all(routeName, path, (ctx) => this.handleHttp(ctx, HandlerClass, checker, savedContext));
         } else {
             const layer = router.ws(path, async (conn, _req, ctx) => {
-                await this.handleWS(ctx as any, HandlerClass, checker, conn, layer, savedContext);
+                await this.handleWS(ctx, HandlerClass, checker, conn, layer, savedContext);
             });
             if (this.config.enableSSE) {
                 router.get(routeName, path, async (ctx) => {
                     Object.assign(ctx.HydroContext.args, ctx.params);
-                    await this.handleWS(ctx as any, HandlerClass, checker, null, null, savedContext);
+                    await this.handleWS(ctx, HandlerClass, checker, null, null, savedContext);
                 });
             }
         }
@@ -840,19 +842,19 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         });
     }
 
-    public addServerLayer(name: LayerEntry['name'], func: LayerEntry['func']) {
+    public addServerLayer(name: LayerEntry['name'], func: UserLayerFunc) {
         return this.registerLayer('serverLayers', { name, func });
     }
 
-    public addHandlerLayer(name: LayerEntry['name'], func: LayerEntry['func']) {
+    public addHandlerLayer(name: LayerEntry['name'], func: UserLayerFunc) {
         return this.registerLayer('handlerLayers', { name, func });
     }
 
-    public addWSLayer(name: LayerEntry['name'], func: LayerEntry['func']) {
+    public addWSLayer(name: LayerEntry['name'], func: UserLayerFunc) {
         return this.registerLayer('wsLayers', { name, func });
     }
 
-    public addLayer(name: LayerEntry['name'], layer: LayerEntry['func']) {
+    public addLayer(name: LayerEntry['name'], layer: UserLayerFunc) {
         this.addHandlerLayer(name, layer);
         this.addWSLayer(name, layer);
     }
