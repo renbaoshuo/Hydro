@@ -18,6 +18,9 @@
         "*.html": "nunjucks"
     },
     "eslint.format.enable": true,
+    "eslint.workingDirectories": [
+        { "mode": "auto" }
+    ],
     "[javascript]": {
         "editor.defaultFormatter": "dbaeumer.vscode-eslint"
     },
