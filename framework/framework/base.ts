@@ -85,6 +85,9 @@ export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
                         if (inject.includes('pagename')) {
                             ctx.set('x-hydro-page', ctx._matchedRouteName || '');
                         }
+                        if (inject.includes('template')) {
+                            ctx.set('x-hydro-template', response.template || '');
+                        }
                         if (response.body !== null && typeof response.body === 'object') {
                             if (inject.includes('uicontext')) response.body.UiContext = UiContext;
                             if (inject.includes('usercontext')) response.body.UserContext = user;

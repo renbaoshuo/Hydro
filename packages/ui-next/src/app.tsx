@@ -5,8 +5,9 @@ import { SlotErrorBoundary } from './registry/error-boundary';
 import { store } from './registry/store';
 
 const App = defineSlot('app:root', () => {
-  const { name } = usePageData();
-  const slotName: SlotName = `page:${name}`;
+  const { name, template } = usePageData();
+  const renderTemplate = template || name;
+  const slotName: SlotName = `page:${renderTemplate}`;
 
   const [subscribe, getSnapshot] = useMemo(() => [
     (cb: () => void) => store.subscribe(slotName, cb),
@@ -20,7 +21,7 @@ const App = defineSlot('app:root', () => {
   if (!Comp) {
     return (
       <div>
-        Page not found: <code>{name}</code>
+        Page not found: <code>{name} ({renderTemplate})</code>
       </div>
     );
   }

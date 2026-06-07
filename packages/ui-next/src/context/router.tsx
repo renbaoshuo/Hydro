@@ -72,7 +72,8 @@ export const RouterProvider: React.FC<React.PropsWithChildren> = ({ children }) 
             headers: {
               Accept: 'application/json',
               'x-hydro-inject': [
-                'uicontext', 'usercontext', 'pagename',
+                'uicontext', 'usercontext',
+                'pagename', 'template',
                 ...(init ? ['routemap'] : []),
               ].join(','),
             },
@@ -84,7 +85,8 @@ export const RouterProvider: React.FC<React.PropsWithChildren> = ({ children }) 
           if (!res.ok) throw new Error(`Navigation failed: ${res.status} ${res.statusText}`);
           const body = await res.json();
           const pageName = res.headers.get('x-hydro-page') || '';
-          console.log('[Hydro] data from', reqUrl, 'received:', body, 'pageName:', pageName);
+          const template = res.headers.get('x-hydro-template') || '';
+          console.log('[Hydro] data from', reqUrl, 'received:', body, 'pageName:', pageName, 'template:', template);
 
           if (gen !== genRef.current) return false;
 
@@ -95,6 +97,7 @@ export const RouterProvider: React.FC<React.PropsWithChildren> = ({ children }) 
             ...prev,
             args: body,
             name: pageName,
+            template: template.replace(/\.html$/, ''),
             url,
           }));
           dispatch({ type: 'FETCH_SUCCESS' });

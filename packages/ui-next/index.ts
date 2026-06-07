@@ -217,13 +217,14 @@ export async function apply(ctx: Context) {
             output: 'html',
             asFallback: true,
             priority: 100,
-            async render(_name, args, context) {
+            async render(template, args, context) {
                 const indexHtml = path.join(__dirname, 'public', 'index.html');
                 if (!fs.existsSync(indexHtml)) return PENDING_HTML;
                 const html = fs.readFileSync(indexHtml, 'utf-8');
                 const serialized = JSON.stringify({
                     HYDRO_INJECTED: true,
                     name: context.handler.context._matchedRouteName,
+                    template: template.replace(/\.html$/, ''),
                     args: {
                         UserContext: context.UserContext,
                         UiContext: context.handler.UiContext,
