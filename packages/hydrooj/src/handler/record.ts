@@ -278,7 +278,6 @@ export class RecordMainConnectionHandler extends ConnectionHandler {
         domainId: string, tid?: ObjectId, pid?: string | number, uidOrName?: string,
         status?: number, pretest = false, all = false, allDomain = false, noTemplate = false,
     ) {
-        this.noTemplate = noTemplate;
         if (tid) {
             this.tdoc = await contest.get(domainId, tid);
             if (!this.tdoc) throw new ContestNotFoundError(domainId, tid);
