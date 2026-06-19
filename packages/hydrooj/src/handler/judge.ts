@@ -4,7 +4,9 @@ import yaml from 'js-yaml';
 import { omit } from 'lodash';
 import { ObjectId } from 'mongodb';
 import sanitize from 'sanitize-filename';
-import { FileInfo, JudgeMeta, JudgeResultBody, ProblemConfigFile, TestCase } from '@hydrooj/common';
+import {
+    JudgeMeta, JudgeResultBody, ProblemConfigFile, TestCase,
+} from '@hydrooj/common';
 import { sleep } from '@hydrooj/utils';
 import { Context } from '../context';
 import {
@@ -280,29 +282,6 @@ export class JudgeConnectionHandler extends ConnectionHandler {
     @subscribe('system/setting')
     sendLanguageConfig() {
         this.send({ language: setting.langs });
-    }
-
-    @subscribe('judge/prefetch')
-    prefetch(_id: ObjectId, domainId: string, pid: number, files: FileInfo[]) {
-        this.send({
-            task: {
-                domainId,
-                pid,
-                uid: 1,
-                lang: 'hydro.prefetch',
-                code: '',
-                rejudged: false,
-                source: '',
-                priority: 0,
-                type: 'prefetch',
-                rid: _id,
-                // not used by prefetch task
-                config: {} as any,
-                meta: {} as any,
-                data: files,
-                trusted: false,
-            },
-        });
     }
 
     async newTask(t: Task) {

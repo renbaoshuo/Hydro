@@ -60,30 +60,12 @@ export class JudgeTask {
     async handle() {
         const host = this.session.config.host || 'local';
         try {
-            this.data = this.request.data;
-            this.source = this.request.source;
-            this.meta = this.request.meta;
-
-            if (this.request.type === 'prefetch') {
-                this.rid = this.request.rid.toString();
-                this.lang = 'hydro.prefetch';
-                this.next = () => { };
-                this.end = () => { };
-                this.span.setAttributes({
-                    host,
-                    rid: this.rid,
-                    source: this.source,
-                    lang: this.lang,
-                    tid: '',
-                });
-                logger.info('Prefetch: %s/%s', host, this.source);
-                await this.cacheOpen(this.source, this.data);
-                return;
-            }
-
             this.rid = this.request.rid.toString();
             this.lang = this.request.lang;
             this.code = { content: this.request.code };
+            this.data = this.request.data;
+            this.source = this.request.source;
+            this.meta = this.request.meta;
             this.files = this.request.files;
             this.input = Array.isArray(this.request.input) ? this.request.input : [this.request.input || ''];
             let tid = this.request.contest?.toString() || '';
