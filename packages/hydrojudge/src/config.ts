@@ -33,14 +33,8 @@ export const JudgeSettings = Schema.object({
     secret: Schema.string().description('Judge Token Secret').default(randomstring(32)),
     disable: Schema.boolean().description('Disable builtin judge').default(false),
     tracing: Schema.object({
-        exporter: Schema.union([
-            Schema.const('grpc'),
-            Schema.const('http'),
-            Schema.const('proto'),
-        ]).description('Tracing exporter').default('http'),
         endpoint: Schema.string().role('url').description('Tempo endpoint').default('http://localhost:4318'),
         samplePercentage: Schema.number().description('Sample percentage').default(0).min(0).max(1),
-        attributes: Schema.any().description('Tracing attributes').default({}),
     }),
     pipe_proxy: Schema.boolean().description('Enable pipe proxy').default(true),
     detail: Schema.union([

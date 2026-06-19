@@ -48,14 +48,7 @@ async function daemon() {
     const shouldRun = await versionCheck((msg) => log.error(msg));
     if (!shouldRun) process.exit(1);
     const tracing = getConfig('tracing');
-    if (tracing?.endpoint && tracing?.samplePercentage) {
-        initTracing({
-            exporter: tracing.exporter,
-            endpoint: tracing.endpoint,
-            samplePercentage: tracing.samplePercentage,
-            attributes: tracing.attributes,
-        });
-    }
+    if (tracing?.endpoint && tracing?.samplePercentage) initTracing(tracing.endpoint, tracing.samplePercentage);
     const _hosts = getConfig('hosts');
     const queue = new PQueue({ concurrency: Infinity });
     await fs.ensureDir(getConfig('tmp_dir'));
