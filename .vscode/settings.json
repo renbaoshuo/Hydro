@@ -32,5 +32,6 @@
     },
     "[typescriptreact]": {
         "editor.defaultFormatter": "dbaeumer.vscode-eslint"
-    }
+    },
+    "git.repositoryScanMaxDepth": -1
 }
