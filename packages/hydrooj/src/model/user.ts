@@ -379,28 +379,44 @@ class UserModel {
 
     @ArgMethod
     static async ensureVuser(uname: string) {
-        const [[min], current] = await Promise.all([
-            collV.find({}).sort({ _id: 1 }).limit(1).toArray(),
-            collV.findOne({ unameLower: uname.toLowerCase() }),
-        ]);
+        const current = await collV.findOne({ unameLower: uname.toLowerCase() });
         if (current) return current._id;
-        const uid = min?._id ? min._id - 1 : -1000;
-        await collV.insertOne({
-            _id: uid,
-            mail: `${-uid}@vuser.local`,
-            mailLower: `${-uid}@vuser.local`,
-            uname,
-            unameLower: uname.trim().toLowerCase(),
-            hash: '',
-            salt: '',
-            hashType: 'hydro',
-            regat: new Date(),
-            ip: ['127.0.0.1'],
-            loginat: new Date(),
-            loginip: '127.0.0.1',
-            priv: 0,
-        });
-        return uid;
+        return UserModel.createVuser(uname);
+    }
+
+    @ArgMethod
+    static async createVuser(uname: string, extra: Record<string, any> = {}) {
+        const [min] = await collV.find({}).sort({ _id: 1 }).limit(1).toArray();
+        let uid = min?._id ? min._id - 1 : -1000;
+        while (true) {
+            try {
+                // eslint-disable-next-line no-await-in-loop
+                await collV.insertOne({
+                    ...extra,
+                    _id: uid,
+                    mail: `${-uid}@vuser.local`,
+                    mailLower: `${-uid}@vuser.local`,
+                    uname,
+                    unameLower: uname.trim().toLowerCase(),
+                    hash: '',
+                    salt: '',
+                    hashType: 'hydro',
+                    regat: new Date(),
+                    ip: ['127.0.0.1'],
+                    loginat: new Date(),
+                    loginip: '127.0.0.1',
+                    priv: 0,
+                });
+                return uid;
+            } catch (e) {
+                // Duplicate _id from a concurrent createVuser/ensureVuser: pick the next slot.
+                if (e?.code === 11000 && JSON.stringify(e.keyPattern) === '{"_id":1}') {
+                    uid -= 1;
+                    continue;
+                }
+                throw e;
+            }
+        }
     }
 
     static getMulti(params: Filter<Udoc> = {}, projection?: (keyof Udoc)[]) {

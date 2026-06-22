@@ -997,6 +997,17 @@ export async function unlockScoreboard(domainId: string, tid: ObjectId) {
     await recalcStatus(domainId, tid);
 }
 
+export async function getTeamVuser(domainId: string, tid: ObjectId, uid: number): Promise<number | null> {
+    const s = await getMultiStatus(domainId, { docId: tid, members: uid }).project({ uid: 1 }).limit(1).next();
+    return s?.uid ?? null;
+}
+
+export async function isSameTeam(domainId: string, tid: ObjectId, a: number, b: number): Promise<boolean> {
+    if (a === b) return true;
+    const [va, vb] = await Promise.all([getTeamVuser(domainId, tid, a), getTeamVuser(domainId, tid, b)]);
+    return !!va && va === vb;
+}
+
 export function canViewHiddenScoreboard(this: { user: User }, tdoc: Tdoc) {
     if (this.user.own(tdoc)) return true;
     if (tdoc.rule === 'homework') return this.user.hasPerm(PERM.PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD);
@@ -1147,6 +1158,8 @@ global.Hydro.model.contest = {
     add,
     getListStatus,
     getMultiStatus,
+    getTeamVuser,
+    isSameTeam,
     attend,
     edit,
     del,
