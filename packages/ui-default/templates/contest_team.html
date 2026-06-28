@@ -23,7 +23,7 @@
           <tbody>
           {% for v in invites %}
             <tr>
-              <td>{{ v.displayName }}</td>
+              <td>{{ v.teamName }}</td>
               <td>
                 <form method="post" action="{{ url('contest_team') }}" style="display:inline">
                   <input type="hidden" name="operation" value="accept">
@@ -49,12 +49,12 @@
         {% endif %}
         {% for v in mine %}
         <div class="callout">
-          <h4>{{ v.displayName }} <small>(ID {{ v._id }})</small></h4>
+          <h4>{{ v.teamName }} <small>(ID {{ v._id }})</small></h4>
 
           <form method="post" action="{{ url('contest_team') }}">
             <input type="hidden" name="operation" value="rename">
             <input type="hidden" name="vuid" value="{{ v._id }}">
-            <input type="text" name="name" value="{{ v.displayName }}">
+            <input type="text" name="name" value="{{ v.teamName }}">
             <button type="submit" class="button small">{{ _('Rename') }}</button>
           </form>
 

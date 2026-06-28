@@ -997,14 +997,14 @@ export async function unlockScoreboard(domainId: string, tid: ObjectId) {
     await recalcStatus(domainId, tid);
 }
 
-export async function getTeamVuser(domainId: string, tid: ObjectId, uid: number): Promise<number | null> {
+export async function getTeamVid(domainId: string, tid: ObjectId, uid: number): Promise<number | null> {
     const s = await getMultiStatus(domainId, { docId: tid, members: uid }).project({ uid: 1 }).limit(1).next();
     return s?.uid ?? null;
 }
 
 export async function isSameTeam(domainId: string, tid: ObjectId, a: number, b: number): Promise<boolean> {
     if (a === b) return true;
-    const [va, vb] = await Promise.all([getTeamVuser(domainId, tid, a), getTeamVuser(domainId, tid, b)]);
+    const [va, vb] = await Promise.all([getTeamVid(domainId, tid, a), getTeamVid(domainId, tid, b)]);
     return !!va && va === vb;
 }
 
@@ -1075,10 +1075,13 @@ export function getClarification(domainId: string, did: ObjectId) {
     return document.get(domainId, document.TYPE_CONTEST_CLARIFICATION, did);
 }
 
-export function getMultiClarification(domainId: string, tid: ObjectId, owner?: number) {
+export function getMultiClarification(domainId: string, tid: ObjectId, owner?: number | number[]) {
+    let ownerFilter: any;
+    if (Array.isArray(owner)) ownerFilter = { owner: { $in: [...owner, 0] } };
+    else if (typeof owner === 'number') ownerFilter = { owner: { $in: [owner, 0] } };
     return document.getMulti(
         domainId, document.TYPE_CONTEST_CLARIFICATION,
-        { parentType: document.TYPE_CONTEST, parentId: tid, ...(typeof owner === 'number' ? { owner: { $in: [owner, 0] } } : {}) },
+        { parentType: document.TYPE_CONTEST, parentId: tid, ...ownerFilter },
     ).sort('_id', -1).toArray();
 }
 
@@ -1162,7 +1165,7 @@ global.Hydro.model.contest = {
     add,
     getListStatus,
     getMultiStatus,
-    getTeamVuser,
+    getTeamVid,
     isSameTeam,
     isOwnOrTeammateRecord,
     attend,

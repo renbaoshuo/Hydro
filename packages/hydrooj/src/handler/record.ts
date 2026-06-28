@@ -201,8 +201,8 @@ export class RecordDetailHandler extends ContestDetailBaseHandler {
         canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE);
         canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE_ACCEPT) && self?.status === STATUS.STATUS_ACCEPTED;
         if (this.tdoc) {
-            const teamVuser = this.tdoc.allowTeam ? await contest.getTeamVuser(domainId, this.tdoc.docId, this.user._id) : null;
-            this.tsdoc = await contest.getStatus(domainId, this.tdoc.docId, teamVuser ?? this.user._id);
+            const teamVid = this.tdoc.allowTeam ? await contest.getTeamVid(domainId, this.tdoc.docId, this.user._id) : null;
+            this.tsdoc = await contest.getStatus(domainId, this.tdoc.docId, teamVid ?? this.user._id);
             canViewCode ||= this.user.own(this.tdoc);
             if (this.tdoc.allowViewCode && contest.isDone(this.tdoc)) {
                 canViewCode ||= !!this.tsdoc?.attend;
@@ -419,8 +419,8 @@ export class RecordDetailConnectionHandler extends ConnectionHandler {
             if (!this.user.own(this.tdoc) && !this.user.hasPerm(PERM.PERM_EDIT_CONTEST)) {
                 this.applyProjection = true;
             }
-            const teamVuser = this.tdoc.allowTeam ? await contest.getTeamVuser(domainId, this.tdoc.docId, this.user._id) : null;
-            this.tsdoc = await contest.getStatus(domainId, this.tdoc.docId, teamVuser ?? this.user._id);
+            const teamVid = this.tdoc.allowTeam ? await contest.getTeamVid(domainId, this.tdoc.docId, this.user._id) : null;
+            this.tsdoc = await contest.getStatus(domainId, this.tdoc.docId, teamVid ?? this.user._id);
         }
         const [pdoc, self] = await Promise.all([
             problem.get(rdoc.domainId, rdoc.pid),

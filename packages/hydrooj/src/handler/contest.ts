@@ -86,7 +86,7 @@ export class ContestDetailBaseHandler extends Handler {
         if (!tid) return; // ProblemDetailHandler also extends from ContestDetailBaseHandler
         this.tdoc = await contest.get(domainId, tid);
         if (this.tdoc.allowTeam) {
-            this.team = await contest.getTeamVuser(domainId, tid, this.user._id) || undefined;
+            this.team = await contest.getTeamVid(domainId, tid, this.user._id) || undefined;
         }
         this.tsdoc = await contest.getStatus(domainId, tid, this.team ?? this.user._id);
         if (this.tdoc.assign?.length && !this.user.own(this.tdoc) && !this.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST)) {
@@ -190,7 +190,7 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
             if (!this.tdoc.allowTeam) throw new ValidationError('allowTeam');
             const v = await collV.findOne({ _id: vuid });
             if (!v?.members?.includes(this.user._id)) throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
-            const conflicts = await Promise.all(v.members.map(async (uid) => ({ uid, vuser: await contest.getTeamVuser(domainId, tid, uid) })));
+            const conflicts = await Promise.all(v.members.map(async (uid) => ({ uid, vuser: await contest.getTeamVid(domainId, tid, uid) })));
             const conflict = conflicts.find((c) => c.vuser);
             if (conflict) throw new ContestAlreadyAttendedError(tid, conflict.uid);
             await contest.attend(domainId, tid, vuid, {
@@ -199,6 +199,9 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
                 members: v.members,
             });
         } else {
+            if (this.tdoc.allowTeam && await contest.getTeamVid(domainId, tid, this.user._id)) {
+                throw new ContestAlreadyAttendedError(tid, this.user._id);
+            }
             await contest.attend(domainId, tid, this.user._id, { subscribe: 1 });
         }
         this.back();
@@ -320,7 +323,7 @@ export class ContestProblemListHandler extends ContestDetailBaseHandler {
         const [pdict, udict, tcdocs] = await Promise.all([
             problem.getList(domainId, this.tdoc.pids, true, true, problem.PROJECTION_CONTEST_LIST),
             user.getList(domainId, [this.tdoc.owner, this.user._id]),
-            contest.getMultiClarification(domainId, tid, this.user._id),
+            contest.getMultiClarification(domainId, tid, this.tsdoc?.members?.length ? this.tsdoc.members : this.user._id),
         ]);
         this.response.body = {
             pdict, psdict: {}, udict, rdict: {}, tdoc: this.tdoc, tcdocs,
@@ -346,10 +349,12 @@ export class ContestProblemListHandler extends ContestDetailBaseHandler {
             rids.push(...Object.values(correction).map((i) => i.rid));
             this.response.body.correction = correction;
         }
+        const uidFilter = this.team && this.tsdoc?.members?.length
+            ? { $in: this.tsdoc.members } : this.user._id;
         [this.response.body.rdict, this.response.body.rdocs] = canViewRecord
             ? await Promise.all([
                 record.getList(domainId, rids),
-                record.getMulti(domainId, { contest: tid, uid: this.user._id })
+                record.getMulti(domainId, { contest: tid, uid: uidFilter })
                     .sort({ _id: -1 }).toArray(),
             ])
             : [Object.fromEntries(psdocs.map((i) => [i.rid, { _id: i.rid }])), []];
@@ -689,7 +694,7 @@ class ContestClarificationHandler extends ContestManagementBaseHandler {
             ]);
         } else {
             const tsdocs = await contest.getMultiStatus(domainId, { docId: tid, subscribe: 1 }).toArray();
-            const uids = Array.from<number>(new Set(tsdocs.map((tsdoc) => tsdoc.uid)));
+            const uids = Array.from<number>(new Set(tsdocs.flatMap((tsdoc) => (tsdoc.members?.length ? tsdoc.members : [tsdoc.uid]))));
             const flag = contest.isOngoing(this.tdoc) ? message.FLAG_ALERT : message.FLAG_UNREAD;
             await Promise.all([
                 contest.addClarification(domainId, tid, 0, content, this.request.ip, subject),
@@ -988,6 +993,7 @@ class ContestTeamHandler extends Handler {
     @param('vuid', Types.Int)
     @param('uid', Types.Int)
     async postInvite(domainId: string, vuid: number, uid: number) {
+        if (uid <= 0 || !await user.getById(domainId, uid)) throw new ValidationError('uid');
         const v = await this.mustMember(vuid);
         if (v.members.includes(uid) || v.invite?.includes(uid)) throw new ValidationError('uid');
         await this.mut(vuid, { $addToSet: { invite: uid } });
