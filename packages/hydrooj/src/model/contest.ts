@@ -933,6 +933,15 @@ export async function getStatus(domainId: string, tid: ObjectId, uid: number) {
     return await document.getStatus(domainId, document.TYPE_CONTEST, tid, uid);
 }
 
+export function getMultiStatus(domainId: string, query: any) {
+    return document.getMultiStatus(domainId, document.TYPE_CONTEST, query);
+}
+
+export async function getTeamVid(domainId: string, tid: ObjectId, uid: number): Promise<number | null> {
+    const s = await getMultiStatus(domainId, { docId: tid, members: uid }).project({ uid: 1 }).limit(1).next();
+    return s?.uid ?? null;
+}
+
 export async function updateStatus(
     domainId: string, tid: ObjectId, uid: number, rid: ObjectId, pid: number,
     {
@@ -954,8 +963,18 @@ export async function updateStatus(
 
 export async function getListStatus(domainId: string, uid: number, tids: ObjectId[]) {
     const r = {};
-    // eslint-disable-next-line no-await-in-loop
-    for (const tid of tids) r[tid.toHexString()] = await getStatus(domainId, tid, uid);
+    for (const tid of tids) {
+        // eslint-disable-next-line no-await-in-loop
+        const tsdoc = await getStatus(domainId, tid, uid);
+        if (tsdoc?.attend) {
+            r[tid.toHexString()] = tsdoc;
+            continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const teamVid = await getTeamVid(domainId, tid, uid);
+        // eslint-disable-next-line no-await-in-loop
+        r[tid.toHexString()] = teamVid ? await getStatus(domainId, tid, teamVid) : tsdoc;
+    }
     return r;
 }
 
@@ -967,10 +986,6 @@ export async function attend(domainId: string, tid: ObjectId, uid: number, paylo
     }
     await document.inc(domainId, document.TYPE_CONTEST, tid, 'attend', 1);
     return {};
-}
-
-export function getMultiStatus(domainId: string, query: any) {
-    return document.getMultiStatus(domainId, document.TYPE_CONTEST, query);
 }
 
 export function setStatus(domainId: string, tid: ObjectId, uid: number, $set?: any, $unset?: any) {
@@ -1025,11 +1040,6 @@ export async function unlockScoreboard(domainId: string, tid: ObjectId) {
     if (!tdoc.lockAt || tdoc.unlocked) return;
     await edit(domainId, tid, { unlocked: true });
     await recalcStatus(domainId, tid);
-}
-
-export async function getTeamVid(domainId: string, tid: ObjectId, uid: number): Promise<number | null> {
-    const s = await getMultiStatus(domainId, { docId: tid, members: uid }).project({ uid: 1 }).limit(1).next();
-    return s?.uid ?? null;
 }
 
 export async function isSameTeam(domainId: string, tid: ObjectId, a: number, b: number): Promise<boolean> {
@@ -1166,7 +1176,7 @@ export async function apply(ctx: Context) {
         if (!bdoc.first) return;
         (async () => {
             const tsdocs = await getMultiStatus(domainId, { docId: tid, subscribe: 1 }).toArray();
-            const uids = Array.from<number>(new Set(tsdocs.map((tsdoc) => tsdoc.uid)));
+            const uids = Array.from<number>(new Set(tsdocs.flatMap((tsdoc) => (tsdoc.members?.length ? tsdoc.members : [tsdoc.uid]))));
             const [team, tdoc, pdoc] = await Promise.all([
                 UserModel.getById(domainId, bdoc.uid),
                 get(domainId, tid),

@@ -564,7 +564,9 @@ export class ProblemHackHandler extends ProblemDetailHandler {
             || (tid && await contest.isSameTeam(domainId, tid, this.rdoc.uid, this.user._id))) {
             throw new HackFailedError('You cannot hack your own submission');
         }
-        if (this.psdoc?.status !== STATUS.STATUS_ACCEPTED) throw new HackFailedError('You must accept this problem before hacking.');
+        const accepted = this.psdoc?.status === STATUS.STATUS_ACCEPTED
+            || this.tsdoc?.detail?.[this.pdoc.docId]?.status === STATUS.STATUS_ACCEPTED;
+        if (!accepted) throw new HackFailedError('You must accept this problem before hacking.');
         if (this.rdoc.status !== STATUS.STATUS_ACCEPTED) throw new HackFailedError('You cannot hack a unsuccessful submission.');
     }
 

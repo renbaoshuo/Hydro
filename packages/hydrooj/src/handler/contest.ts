@@ -66,7 +66,6 @@ export class ContestListHandler extends Handler {
         const [tdocs, tpcount] = await this.paginate(cursor, page, 'contest');
         const tids = [];
         for (const tdoc of tdocs) tids.push(tdoc.docId);
-        // FIXME: Team status need to be queried here.
         const tsdict = await contest.getListStatus(domainId, this.user._id, tids);
         const groupsFilter = groups.filter((i) => !Number.isSafeInteger(+i));
         this.response.template = 'contest_main.html';
@@ -190,8 +189,12 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
             if (!this.tdoc.allowTeam) throw new ValidationError('allowTeam');
             const v = await collV.findOne({ _id: vuid });
             if (!v?.members?.includes(this.user._id)) throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
-            const conflicts = await Promise.all(v.members.map(async (uid) => ({ uid, vuser: await contest.getTeamVid(domainId, tid, uid) })));
-            const conflict = conflicts.find((c) => c.vuser);
+            const conflicts = await Promise.all(v.members.map(async (uid) => ({
+                uid,
+                personal: (await contest.getStatus(domainId, tid, uid))?.attend,
+                vuser: await contest.getTeamVid(domainId, tid, uid),
+            })));
+            const conflict = conflicts.find((c) => c.personal || c.vuser);
             if (conflict) throw new ContestAlreadyAttendedError(tid, conflict.uid);
             await contest.attend(domainId, tid, vuid, {
                 subscribe: 1,
@@ -455,6 +458,7 @@ export class ContestEditHandler extends Handler {
     ) {
         if (!Object.keys(contest.RULES).includes(rule) || contest.RULES[rule].hidden) throw new ValidationError('rule');
         if (autoHide) this.checkPerm(PERM.PERM_EDIT_PROBLEM);
+        allowTeam ||= !!this.tdoc?.allowTeam;
         const pids = _pids.replace(/，/g, ',').split(',').map((i) => +i).filter((i) => i);
         const beginAtMoment = moment.tz(`${beginAtDate} ${beginAtTime}`, this.user.timeZone);
         if (!beginAtMoment.isValid()) throw new ValidationError('beginAtDate', 'beginAtTime');
@@ -492,7 +496,6 @@ export class ContestEditHandler extends Handler {
                 executeAfter: endAt,
             });
         }
-        // FIXME: allowTeam cannot be disabled once enabled.
         await contest.edit(domainId, tid, {
             assign, _code, autoHide, lockAt, maintainer, allowViewCode, allowPrint, keepScoreboardHidden, allowTeam, langs,
         });
@@ -740,7 +743,7 @@ export class ContestUserHandler extends ContestManagementBaseHandler {
     @param('tid', Types.ObjectId)
     async get(domainId: string, tid: ObjectId) {
         const tsdocs = await contest.getMultiStatus(domainId, { docId: tid }).project({
-            uid: 1, attend: 1, startAt: 1, unrank: 1, endAt: 1,
+            uid: 1, attend: 1, startAt: 1, unrank: 1, endAt: 1, teamName: 1, members: 1,
         }).toArray();
         for (const tsdoc of tsdocs) {
             if (this.tdoc.duration && tsdoc.startAt) {
@@ -751,8 +754,9 @@ export class ContestUserHandler extends ContestManagementBaseHandler {
                 ]).toDate();
             }
         }
+        const memberUids = tsdocs.flatMap((tsdoc) => tsdoc.members || []);
         const udict = await user.getListForRender(
-            domainId, [this.tdoc.owner, ...tsdocs.map((i) => i.uid)],
+            domainId, [this.tdoc.owner, ...tsdocs.map((i) => i.uid), ...memberUids],
             this.user.hasPerm(PERM.PERM_VIEW_USER_PRIVATE_INFO),
         );
         this.response.body = { tdoc: this.tdoc, tsdocs, udict };

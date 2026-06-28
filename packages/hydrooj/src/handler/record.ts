@@ -271,6 +271,7 @@ export class RecordMainConnectionHandler extends ConnectionHandler {
     status: number;
     pretest = false;
     tdoc: Tdoc;
+    teamMembers?: number[];
     applyProjection = false;
     noTemplate = false;
     queue: Map<string, () => Promise<any>> = new Map();
@@ -309,7 +310,14 @@ export class RecordMainConnectionHandler extends ConnectionHandler {
                 else throw new UserNotFoundError(uidOrName);
             }
         }
-        if (this.uid !== this.user._id) {
+        if (this.tdoc?.allowTeam && !pretest && !all && !allDomain && (this.uid === undefined || this.uid === this.user._id)) {
+            const teamVid = await contest.getTeamVid(domainId, this.tdoc.docId, this.user._id);
+            if (teamVid) {
+                const tsdoc = await contest.getStatus(domainId, this.tdoc.docId, teamVid);
+                this.teamMembers = tsdoc?.members?.length ? tsdoc.members : undefined;
+            }
+        }
+        if (this.uid !== this.user._id && !this.teamMembers) {
             const sameTeam = !!this.tdoc && this.tdoc.allowTeam && typeof this.uid === 'number'
                 && await contest.isSameTeam(domainId, this.tdoc.docId, this.uid, this.user._id);
             if (!sameTeam) this.checkPerm(PERM.PERM_VIEW_RECORD);
@@ -357,7 +365,9 @@ export class RecordMainConnectionHandler extends ConnectionHandler {
             }
         }
         if (typeof this.pid === 'number' && rdoc.pid !== this.pid) return;
-        if (typeof this.uid === 'number' && rdoc.uid !== this.uid) return;
+        if (this.teamMembers) {
+            if (!this.teamMembers.includes(rdoc.uid)) return;
+        } else if (typeof this.uid === 'number' && rdoc.uid !== this.uid) return;
 
         let [udoc, pdoc] = await Promise.all([
             user.getById(this.args.domainId, rdoc.uid),
