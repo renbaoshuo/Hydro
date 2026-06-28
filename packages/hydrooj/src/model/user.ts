@@ -447,7 +447,7 @@ class UserModel {
         for (const key in udict) {
             udict[key].school ||= '';
             udict[key].studentId ||= '';
-            udict[key].displayName ||= udict[key].uname;
+            udict[key].displayName ||= udict[key].teamName || udict[key].uname;
             udict[key].avatar ||= `gravatar:${udict[key].mail}`;
         }
         return udict as BaseUserDict;
