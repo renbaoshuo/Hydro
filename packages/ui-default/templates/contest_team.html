@@ -1,0 +1,99 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row">
+  <div class="medium-9 columns">
+    <div class="section">
+      <div class="section__header">
+        <h1 class="section__title">{{ _('Team Participation') }}</h1>
+      </div>
+      <div class="section__body">
+
+        <h3>{{ _('Create a Team') }}</h3>
+        <form method="post" action="{{ url('contest_team') }}">
+          <input type="hidden" name="operation" value="create">
+          <input type="text" name="name" placeholder="{{ _('Team name (defaults to your username)') }}">
+          <button type="submit" class="primary rounded button">{{ _('Create') }}</button>
+        </form>
+
+        {% if invites.length %}
+        <hr>
+        <h3>{{ _('Invitations') }}</h3>
+        <table class="data-table">
+          <thead><tr><th>{{ _('Team') }}</th><th>{{ _('Action') }}</th></tr></thead>
+          <tbody>
+          {% for v in invites %}
+            <tr>
+              <td>{{ v.displayName }}</td>
+              <td>
+                <form method="post" action="{{ url('contest_team') }}" style="display:inline">
+                  <input type="hidden" name="operation" value="accept">
+                  <input type="hidden" name="vuid" value="{{ v._id }}">
+                  <button type="submit" class="button small">{{ _('Accept') }}</button>
+                </form>
+                <form method="post" action="{{ url('contest_team') }}" style="display:inline">
+                  <input type="hidden" name="operation" value="reject">
+                  <input type="hidden" name="vuid" value="{{ v._id }}">
+                  <button type="submit" class="button small">{{ _('Reject') }}</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+
+        <hr>
+        <h3>{{ _('My Teams') }}</h3>
+        {% if not mine.length %}
+          <p>{{ _('You are not in any team. Create one above, or ask a teammate to invite you by your User ID.') }}</p>
+        {% endif %}
+        {% for v in mine %}
+        <div class="callout">
+          <h4>{{ v.displayName }} <small>(ID {{ v._id }})</small></h4>
+
+          <form method="post" action="{{ url('contest_team') }}">
+            <input type="hidden" name="operation" value="rename">
+            <input type="hidden" name="vuid" value="{{ v._id }}">
+            <input type="text" name="name" value="{{ v.displayName }}">
+            <button type="submit" class="button small">{{ _('Rename') }}</button>
+          </form>
+
+          <p><strong>{{ _('Members') }}</strong></p>
+          <ul>
+            {% for m in v.members %}
+            <li>
+              {{ udict[m].uname }}
+              <form method="post" action="{{ url('contest_team') }}" style="display:inline">
+                <input type="hidden" name="operation" value="leave">
+                <input type="hidden" name="vuid" value="{{ v._id }}">
+                <input type="hidden" name="uid" value="{{ m }}">
+                <button type="submit" class="button small">{{ _('Remove') }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+
+          {% if v.invite and v.invite.length %}
+          <p><strong>{{ _('Pending Invites') }}:</strong> {{ v.invite.length }}</p>
+          {% endif %}
+
+          <form method="post" action="{{ url('contest_team') }}">
+            <input type="hidden" name="operation" value="invite">
+            <input type="hidden" name="vuid" value="{{ v._id }}">
+            <input type="number" name="uid" placeholder="{{ _('User ID to invite') }}">
+            <button type="submit" class="button small">{{ _('Invite') }}</button>
+          </form>
+
+          <form method="post" action="{{ url('contest_team') }}">
+            <input type="hidden" name="operation" value="leave">
+            <input type="hidden" name="vuid" value="{{ v._id }}">
+            <button type="submit" class="button small">{{ _('Leave Team') }}</button>
+          </form>
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

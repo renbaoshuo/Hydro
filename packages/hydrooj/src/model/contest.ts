@@ -1008,6 +1008,10 @@ export async function isSameTeam(domainId: string, tid: ObjectId, a: number, b: 
     return !!va && va === vb;
 }
 
+export async function isOwnOrTeammateRecord(domainId: string, rdoc: RecordDoc, uid: number): Promise<boolean> {
+    return rdoc.uid === uid || (!!rdoc.contest && isSameTeam(domainId, rdoc.contest, rdoc.uid, uid));
+}
+
 export function canViewHiddenScoreboard(this: { user: User }, tdoc: Tdoc) {
     if (this.user.own(tdoc)) return true;
     if (tdoc.rule === 'homework') return this.user.hasPerm(PERM.PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD);
@@ -1160,6 +1164,7 @@ global.Hydro.model.contest = {
     getMultiStatus,
     getTeamVuser,
     isSameTeam,
+    isOwnOrTeammateRecord,
     attend,
     edit,
     del,
