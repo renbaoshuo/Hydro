@@ -108,7 +108,7 @@ export interface VUdoc extends Record<string, any> {
     loginip: '127.0.0.1';
 
     // for contest team
-    teamName?: string;
+    displayName?: string;
     members?: number[];
     invite?: number[];
 }
@@ -470,7 +470,7 @@ export interface ContestStatusDoc extends StatusDocBase, ContestStat {
     startAt?: Date;
     endAt?: Date; // 灵活时间模式的结束时间，或者是提前结束比赛的时间
     rev?: number;
-    teamName?: string;
+    displayName?: string;
     members?: number[];
 }
 

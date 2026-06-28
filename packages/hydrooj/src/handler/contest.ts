@@ -107,7 +107,7 @@ export class ContestDetailBaseHandler extends Handler {
         if (!this.tsdoc) return null;
         return pick(this.tsdoc, [
             'attend', 'subscribe', 'startAt',
-            'teamName', 'members', // for team
+            'displayName', 'members', // for team
             ...(this.tdoc.duration || this.tsdoc.endAt ? ['endAt'] : []),
         ]);
     }
@@ -198,7 +198,7 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
             if (conflict) throw new ContestAlreadyAttendedError(tid, conflict.uid);
             await contest.attend(domainId, tid, vuid, {
                 subscribe: 1,
-                teamName: v.teamName,
+                displayName: v.displayName,
                 members: v.members,
             });
         } else {
@@ -743,7 +743,7 @@ export class ContestUserHandler extends ContestManagementBaseHandler {
     @param('tid', Types.ObjectId)
     async get(domainId: string, tid: ObjectId) {
         const tsdocs = await contest.getMultiStatus(domainId, { docId: tid }).project({
-            uid: 1, attend: 1, startAt: 1, unrank: 1, endAt: 1, teamName: 1, members: 1,
+            uid: 1, attend: 1, startAt: 1, unrank: 1, endAt: 1, displayName: 1, members: 1,
         }).toArray();
         for (const tsdoc of tsdocs) {
             if (this.tdoc.duration && tsdoc.startAt) {
@@ -980,7 +980,7 @@ class ContestTeamHandler extends Handler {
     @param('name', Types.String, true)
     async postCreate(domainId: string, name?: string) {
         await user.createVuser(`team:${this.user._id}:${randomstring(6)}`, {
-            teamName: name?.trim() || this.user.uname,
+            displayName: name?.trim() || this.user.uname,
             members: [this.user._id],
         });
         this.back();
@@ -990,7 +990,7 @@ class ContestTeamHandler extends Handler {
     @param('name', Types.String)
     async postRename(domainId: string, vuid: number, name: string) {
         await this.mustMember(vuid);
-        await this.mut(vuid, { $set: { teamName: name.trim() } });
+        await this.mut(vuid, { $set: { displayName: name.trim() } });
         this.back();
     }
 
@@ -1002,7 +1002,7 @@ class ContestTeamHandler extends Handler {
         if (v.members.includes(uid) || v.invite?.includes(uid)) throw new ValidationError('uid');
         await this.mut(vuid, { $addToSet: { invite: uid } });
         await message.send(this.user._id, uid,
-            `${this.user.uname} invites you to join team "${v.teamName}": ${this.url('contest_team')}`,
+            `${this.user.uname} invites you to join team "${v.displayName}": ${this.url('contest_team')}`,
             message.FLAG_RICHTEXT);
         this.back();
     }
@@ -1133,8 +1133,8 @@ export async function apply(ctx: Context) {
                     teams.map((i, idx) => {
                         const showName = this.user.hasPerm(PERM.PERM_VIEW_USER_PRIVATE_INFO) && udict[i.uid].displayName
                             ? udict[i.uid].displayName : udict[i.uid].uname;
-                        const teamName = `${i.rank ? '*' : ''}${escape(udict[i.uid].school || unknownSchool)}-${escape(showName)}`;
-                        return `@t ${idx + 1},0,1,"${teamName}"`;
+                        const displayName = `${i.rank ? '*' : ''}${escape(udict[i.uid].school || unknownSchool)}-${escape(showName)}`;
+                        return `@t ${idx + 1},0,1,"${displayName}"`;
                     }),
                     submissions,
                 );

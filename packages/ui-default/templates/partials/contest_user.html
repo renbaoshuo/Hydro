@@ -6,8 +6,8 @@
     <td class="col--uid">{{ tsdoc.uid }}</td>
     <td class="col--user">
       {{ user.render_inline(udict[tsdoc.uid], badge=false) }}
-      {% if tsdoc.teamName %}
-        <br><small class="supplementary">{{ tsdoc.teamName }}</small>
+      {% if tsdoc.displayName %}
+        <br><small class="supplementary">{{ tsdoc.displayName }}</small>
       {% endif %}
       {% if tsdoc.members and tsdoc.members.length %}
         <br><small class="supplementary">
