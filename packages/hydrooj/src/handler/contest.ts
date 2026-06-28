@@ -25,7 +25,7 @@ import problem from '../model/problem';
 import record from '../model/record';
 import ScheduleModel from '../model/schedule';
 import storage from '../model/storage';
-import user, { collV, deleteUserCache } from '../model/user';
+import user from '../model/user';
 import {
     Handler, param, post, Type, Types,
 } from '../service/server';
@@ -164,11 +164,17 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
     @param('tid', Types.ObjectId)
     async get(domainId: string, tid: ObjectId) {
         this.response.template = 'contest_detail.html';
-        const udict = await user.getList(domainId, [this.tdoc.owner]);
+        const [udict, teamVdocs] = await Promise.all([
+            user.getList(domainId, [this.tdoc.owner]),
+            this.tdoc.allowTeam && this.user.hasPriv(PRIV.PRIV_USER_PROFILE)
+                ? user.getVusersByMember(this.user._id, { _id: 1, displayName: 1, members: 1 })
+                : [],
+        ]);
         this.response.body = {
             tdoc: this.tdoc,
             tsdoc: this.tsdocAsPublic(),
             udict,
+            team_vdocs: teamVdocs,
             files: (this.tsdoc?.attend && !contest.isNotStarted(this.tdoc)) ? sortFiles(this.tdoc.privateFiles || []) : [],
             urlForFile: (filename: string) => this.url('contest_file_download', { tid, filename, type: 'private' }),
         };
@@ -187,7 +193,7 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
         if (this.tdoc._code && code !== this.tdoc._code) throw new InvalidTokenError('Contest Invitation', code);
         if (vuid) {
             if (!this.tdoc.allowTeam) throw new ValidationError('allowTeam');
-            const v = await collV.findOne({ _id: vuid });
+            const v = await user.getVuserById(vuid);
             if (!v?.members?.includes(this.user._id)) throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
             const conflicts = await Promise.all(v.members.map(async (uid) => ({
                 uid,
@@ -957,8 +963,8 @@ class ContestTeamHandler extends Handler {
 
     async get({ domainId }) {
         const [mine, invites] = await Promise.all([
-            collV.find({ members: this.user._id }).toArray(),
-            collV.find({ invite: this.user._id }).toArray(),
+            user.getVusersByMember(this.user._id),
+            user.getVusersByInvite(this.user._id),
         ]);
         const udict = await user.getList(domainId, mine.flatMap((t) => [...t.members, ...(t.invite || [])]));
         this.response.template = 'contest_team.html';
@@ -966,15 +972,13 @@ class ContestTeamHandler extends Handler {
     }
 
     private async mustMember(vuid: number) {
-        const v = await collV.findOne({ _id: vuid });
+        const v = await user.getVuserById(vuid);
         if (!v?.members?.includes(this.user._id)) throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
         return v;
     }
 
     private async mut(vuid: number, update: any) {
-        const v = await collV.findOneAndUpdate({ _id: vuid }, update, { returnDocument: 'after' });
-        deleteUserCache(v);
-        return v;
+        return await user.updateVuserById(vuid, update);
     }
 
     @param('name', Types.String, true)
@@ -1009,7 +1013,7 @@ class ContestTeamHandler extends Handler {
 
     @param('vuid', Types.Int)
     async postAccept(domainId: string, vuid: number) {
-        const v = await collV.findOne({ _id: vuid });
+        const v = await user.getVuserById(vuid);
         if (!v?.invite?.includes(this.user._id)) throw new ValidationError('vuid');
         await this.mut(vuid, { $pull: { invite: this.user._id }, $addToSet: { members: this.user._id } });
         this.back();
@@ -1017,7 +1021,7 @@ class ContestTeamHandler extends Handler {
 
     @param('vuid', Types.Int)
     async postReject(domainId: string, vuid: number) {
-        const v = await collV.findOne({ _id: vuid });
+        const v = await user.getVuserById(vuid);
         if (!v?.invite?.includes(this.user._id)) throw new ValidationError('vuid');
         await this.mut(vuid, { $pull: { invite: this.user._id } });
         this.back();

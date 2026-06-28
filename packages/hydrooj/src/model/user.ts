@@ -419,6 +419,25 @@ class UserModel {
         }
     }
 
+    static getVuserById(uid: number) {
+        return collV.findOne({ _id: uid });
+    }
+
+    static getVusersByMember(uid: number, projection?: Partial<Record<keyof VUdoc, 0 | 1>>) {
+        const cursor = collV.find({ members: uid });
+        return projection ? cursor.project<VUdoc>(projection).toArray() : cursor.toArray();
+    }
+
+    static getVusersByInvite(uid: number) {
+        return collV.find({ invite: uid }).toArray();
+    }
+
+    static async updateVuserById(uid: number, update: any) {
+        const vdoc = await collV.findOneAndUpdate({ _id: uid }, update, { returnDocument: 'after' });
+        deleteUserCache(vdoc);
+        return vdoc;
+    }
+
     static getMulti(params: Filter<Udoc> = {}, projection?: (keyof Udoc)[]) {
         return projection ? coll.find(params).project<Udoc>(buildProjection(projection)) : coll.find(params);
     }
