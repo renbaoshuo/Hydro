@@ -977,10 +977,6 @@ class ContestTeamHandler extends Handler {
         return v;
     }
 
-    private async mut(vuid: number, update: any) {
-        return await user.updateVuserById(vuid, update);
-    }
-
     @param('name', Types.String, true)
     async postCreate(domainId: string, name?: string) {
         await user.createVuser(`team:${this.user._id}:${randomstring(6)}`, {
@@ -994,7 +990,7 @@ class ContestTeamHandler extends Handler {
     @param('name', Types.String)
     async postRename(domainId: string, vuid: number, name: string) {
         await this.mustMember(vuid);
-        await this.mut(vuid, { $set: { displayName: name.trim() } });
+        await user.updateVuserById(vuid, { $set: { displayName: name.trim() } });
         this.back();
     }
 
@@ -1004,7 +1000,7 @@ class ContestTeamHandler extends Handler {
         if (uid <= 0 || !await user.getById(domainId, uid)) throw new ValidationError('uid');
         const v = await this.mustMember(vuid);
         if (v.members.includes(uid) || v.invite?.includes(uid)) throw new ValidationError('uid');
-        await this.mut(vuid, { $addToSet: { invite: uid } });
+        await user.updateVuserById(vuid, { $addToSet: { invite: uid } });
         await message.send(this.user._id, uid,
             `${this.user.uname} invites you to join team "${v.displayName}": ${this.url('contest_team')}`,
             message.FLAG_RICHTEXT);
@@ -1015,7 +1011,7 @@ class ContestTeamHandler extends Handler {
     async postAccept(domainId: string, vuid: number) {
         const v = await user.getVuserById(vuid);
         if (!v?.invite?.includes(this.user._id)) throw new ValidationError('vuid');
-        await this.mut(vuid, { $pull: { invite: this.user._id }, $addToSet: { members: this.user._id } });
+        await user.updateVuserById(vuid, { $pull: { invite: this.user._id }, $addToSet: { members: this.user._id } });
         this.back();
     }
 
@@ -1023,16 +1019,23 @@ class ContestTeamHandler extends Handler {
     async postReject(domainId: string, vuid: number) {
         const v = await user.getVuserById(vuid);
         if (!v?.invite?.includes(this.user._id)) throw new ValidationError('vuid');
-        await this.mut(vuid, { $pull: { invite: this.user._id } });
+        await user.updateVuserById(vuid, { $pull: { invite: this.user._id } });
         this.back();
     }
 
     @param('vuid', Types.Int)
     @param('uid', Types.Int, true)
     async postLeave(domainId: string, vuid: number, uid?: number) {
-        // FIXME: remove uid in invite[]
-        await this.mustMember(vuid);
-        await this.mut(vuid, { $pull: { members: uid ?? this.user._id } });
+        const target = uid ?? this.user._id;
+        if (target === this.user._id) {
+            const v = await user.getVuserById(vuid);
+            if (!v?.members?.includes(this.user._id) && !v?.invite?.includes(this.user._id)) {
+                throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
+            }
+        } else {
+            await this.mustMember(vuid);
+        }
+        await user.updateVuserById(vuid, { $pull: { members: target, invite: target } });
         this.back();
     }
 }

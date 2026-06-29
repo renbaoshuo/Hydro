@@ -240,17 +240,7 @@ const acm = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => (a.score || 0) === (b.score || 0) && (a.time || 0) === (b.time || 0));
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const memberUids = tdoc.allowTeam
-            ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
-            : [];
-        const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], config.showDisplayName ? ['displayName'] : []);
-        if (tdoc.allowTeam) {
-            for (const [, tsdoc] of rankedTsdocs) {
-                if (tsdoc.members?.length && udict[tsdoc.uid]) {
-                    (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.map((uid) => udict[uid]?.uname || `UID ${uid}`);
-                }
-            }
-        }
+        const udict = await getScoreboardUdict(tdoc, rankedTsdocs, uids, config.showDisplayName);
         // Find first accept
         const first = {};
         const data = await document.collStatus.aggregate([
@@ -425,17 +415,7 @@ const oi = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => (a.score || 0) === (b.score || 0));
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const memberUids = tdoc.allowTeam
-            ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
-            : [];
-        const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], config.showDisplayName ? ['displayName'] : []);
-        if (tdoc.allowTeam) {
-            for (const [, tsdoc] of rankedTsdocs) {
-                if (tsdoc.members?.length && udict[tsdoc.uid]) {
-                    (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.map((uid) => udict[uid]?.uname || `UID ${uid}`);
-                }
-            }
-        }
+        const udict = await getScoreboardUdict(tdoc, rankedTsdocs, uids, config.showDisplayName);
         const psdict = {};
         const first = {};
         const useRelativeTime = !!tdoc.duration;
@@ -805,17 +785,7 @@ const homework = buildContestRule({
     async scoreboard(config, _, tdoc, pdict, cursor) {
         const rankedTsdocs = await db.ranked(cursor, (a, b) => a.score === b.score);
         const uids = rankedTsdocs.map(([, tsdoc]) => tsdoc.uid);
-        const memberUids = tdoc.allowTeam
-            ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
-            : [];
-        const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], config.showDisplayName ? ['displayName'] : []);
-        if (tdoc.allowTeam) {
-            for (const [, tsdoc] of rankedTsdocs) {
-                if (tsdoc.members?.length && udict[tsdoc.uid]) {
-                    (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.map((uid) => udict[uid]?.uname || `UID ${uid}`);
-                }
-            }
-        }
+        const udict = await getScoreboardUdict(tdoc, rankedTsdocs, uids, config.showDisplayName);
         const columns = await this.scoreboardHeader(config, _, tdoc, pdict);
         const rows: ScoreboardRow[] = [
             columns,
@@ -927,6 +897,23 @@ export function getMultiBalloon(domainId: string, tid: ObjectId, query: any = {}
 
 export async function updateBalloon(domainId: string, tid: ObjectId, _id: ObjectId, $set: any) {
     return await collBalloon.findOneAndUpdate({ domainId, tid, _id }, { $set });
+}
+
+async function getScoreboardUdict(
+    tdoc: Tdoc, rankedTsdocs: [number, ContestStatusDoc][], uids: number[], showDisplayName: boolean,
+) {
+    const memberUids = tdoc.allowTeam
+        ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
+        : [];
+    const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], showDisplayName ? ['displayName'] : []);
+    if (tdoc.allowTeam) {
+        for (const [, tsdoc] of rankedTsdocs) {
+            if (tsdoc.members?.length && udict[tsdoc.uid]) {
+                (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.map((uid) => udict[uid]?.uname || `UID ${uid}`);
+            }
+        }
+    }
+    return udict;
 }
 
 export async function getStatus(domainId: string, tid: ObjectId, uid: number) {
@@ -1049,7 +1036,10 @@ export async function isSameTeam(domainId: string, tid: ObjectId, a: number, b: 
 }
 
 export async function isOwnOrTeammateRecord(domainId: string, rdoc: RecordDoc, uid: number): Promise<boolean> {
-    return rdoc.uid === uid || (!!rdoc.contest && isSameTeam(domainId, rdoc.contest, rdoc.uid, uid));
+    if (rdoc.uid === uid) return true;
+    if (!rdoc.contest) return false;
+    if (RecordModel.RECORD_PRETEST.equals(rdoc.contest) || RecordModel.RECORD_GENERATE.equals(rdoc.contest)) return false;
+    return isSameTeam(domainId, rdoc.contest, rdoc.uid, uid);
 }
 
 export function canViewHiddenScoreboard(this: { user: User }, tdoc: Tdoc) {
@@ -1116,9 +1106,9 @@ export function getClarification(domainId: string, did: ObjectId) {
 }
 
 export function getMultiClarification(domainId: string, tid: ObjectId, owner?: number | number[]) {
-    let ownerFilter: any;
-    if (Array.isArray(owner)) ownerFilter = { owner: { $in: [...owner, 0] } };
-    else if (typeof owner === 'number') ownerFilter = { owner: { $in: [owner, 0] } };
+    const ownerFilter = owner === undefined
+        ? {}
+        : { owner: { $in: [0, ...(Array.isArray(owner) ? owner : [owner])] } };
     return document.getMulti(
         domainId, document.TYPE_CONTEST_CLARIFICATION,
         { parentType: document.TYPE_CONTEST, parentId: tid, ...ownerFilter },

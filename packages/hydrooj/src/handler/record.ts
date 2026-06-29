@@ -318,7 +318,7 @@ export class RecordMainConnectionHandler extends ConnectionHandler {
             }
         }
         if (this.uid !== this.user._id && !this.teamMembers) {
-            const sameTeam = !!this.tdoc && this.tdoc.allowTeam && typeof this.uid === 'number'
+            const sameTeam = this.tdoc?.allowTeam && typeof this.uid === 'number'
                 && await contest.isSameTeam(domainId, this.tdoc.docId, this.uid, this.user._id);
             if (!sameTeam) this.checkPerm(PERM.PERM_VIEW_RECORD);
         }
