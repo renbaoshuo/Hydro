@@ -909,7 +909,7 @@ async function getScoreboardUdict(
     if (tdoc.allowTeam) {
         for (const [, tsdoc] of rankedTsdocs) {
             if (tsdoc.members?.length && udict[tsdoc.uid]) {
-                (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.map((uid) => udict[uid]?.uname || `UID ${uid}`);
+                (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.filter((uid) => udict[uid]);
             }
         }
     }

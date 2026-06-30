@@ -1,3 +1,4 @@
+{% import "components/user.html" as user with context %}
 {% extends "layout/basic.html" %}
 {% block content %}
 <div class="row">
@@ -62,7 +63,7 @@
           <ul>
             {% for m in v.members %}
             <li>
-              {{ udict[m].uname }}
+              {{ user.render_inline(udict[m], avatar=false, badge=false) }}
               <form method="post" action="{{ url('contest_team') }}" style="display:inline">
                 <input type="hidden" name="operation" value="leave">
                 <input type="hidden" name="vuid" value="{{ v._id }}">
@@ -74,7 +75,20 @@
           </ul>
 
           {% if v.invite and v.invite.length %}
-          <p><strong>{{ _('Pending Invites') }}:</strong> {{ v.invite.length }}</p>
+          <p><strong>{{ _('Pending Invites') }}</strong></p>
+          <ul>
+            {% for uid in v.invite %}
+            <li>
+              {{ user.render_inline(udict[uid], avatar=false, badge=false) }}
+              <form method="post" action="{{ url('contest_team') }}" style="display:inline">
+                <input type="hidden" name="operation" value="leave">
+                <input type="hidden" name="vuid" value="{{ v._id }}">
+                <input type="hidden" name="uid" value="{{ uid }}">
+                <button type="submit" class="button small">{{ _('Revoke') }}</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
           {% endif %}
 
           <form method="post" action="{{ url('contest_team') }}">

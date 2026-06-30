@@ -54,9 +54,16 @@
                 <span class="starred--hide"><span class="icon icon-star--outline" data-tooltip="{{ _('Star') }}"></span></span>
                 <span class="starred--show"><span class="icon icon-star" data-tooltip="{{ _('Unstar') }}"></span></span>
               </button>
-              {{ user.render_inline(udict[column.raw], badge=false) }}
               {%- if udict[column.raw].teamMembers -%}
-                <br><small class="supplementary">{{ udict[column.raw].teamMembers|join(', ') }}</small>
+                <span class="user-profile-link"><span class="user-profile-name">{{ udict[column.raw].displayName }}</span></span>
+                <br><small class="supplementary">
+                  {%- for memberUid in udict[column.raw].teamMembers -%}
+                    {%- if loop.index0 -%}, {% endif -%}
+                    {{ user.render_inline(udict[memberUid], badge=false) }}
+                  {%- endfor -%}
+                </small>
+              {%- else -%}
+                {{ user.render_inline(udict[column.raw], badge=false) }}
               {%- endif -%}
             {%- elif column.type == 'record' and column.raw -%}
               {{ renderRecord(column, canView) }}
