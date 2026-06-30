@@ -195,13 +195,11 @@ export class ContestDetailHandler extends ContestDetailBaseHandler {
             if (!this.tdoc.allowTeam) throw new ValidationError('allowTeam');
             const v = await user.getVuserById(vuid);
             if (!v?.members?.includes(this.user._id)) throw new PermissionError(PERM.PERM_ATTEND_CONTEST);
-            const conflicts = await Promise.all(v.members.map(async (uid) => ({
-                uid,
-                personal: (await contest.getStatus(domainId, tid, uid))?.attend,
-                vuser: await contest.getTeamVid(domainId, tid, uid),
-            })));
-            const conflict = conflicts.find((c) => c.personal || c.vuser);
-            if (conflict) throw new ContestAlreadyAttendedError(tid, conflict.uid);
+            const conflicts = await Promise.all(v.members.map(async (uid) =>
+                ((await contest.getStatus(domainId, tid, uid))?.attend
+                    || await contest.getTeamVid(domainId, tid, uid)) ? uid : null));
+            const conflict = conflicts.find((c) => c !== null);
+            if (conflict != null) throw new ContestAlreadyAttendedError(tid, conflict);
             await contest.attend(domainId, tid, vuid, {
                 subscribe: 1,
                 displayName: v.displayName,

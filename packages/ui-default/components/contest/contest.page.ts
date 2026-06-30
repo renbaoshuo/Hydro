@@ -48,18 +48,19 @@ const contestPage = new AutoloadPage('contestPage', () => {
 
   $('[data-contest-attend-form]').on('submit', async (ev) => {
     ev.preventDefault();
-    const action = await attendDialog.clear().open();
-    if (action !== 'ok') return;
+    const $form = $(ev.currentTarget);
+    const params: Record<string, any> = { operation: 'attend' };
 
-    const mode = $dialogBody.find('[name="contest_attend_mode"]').val();
-    const params: Record<string, any> = {
-      operation: 'attend',
-    };
-    if (mode === 'team') params.vuid = $dialogBody.find('[name="contest_attend_vuid"]').val();
-    const code = $dialogBody.find('[name="contest_attend_code"]').val();
-    if (code) params.code = code.toString().trim();
+    if ($form.is('[data-contest-needs-dialog]')) {
+      const action = await attendDialog.clear().open();
+      if (action !== 'ok') return;
+      const mode = $dialogBody.find('[name="contest_attend_mode"]').val();
+      if (mode === 'team') params.vuid = $dialogBody.find('[name="contest_attend_vuid"]').val();
+      const code = $dialogBody.find('[name="contest_attend_code"]').val();
+      if (code) params.code = code.toString().trim();
+    }
 
-    request.post($(ev.currentTarget).attr('action') || '', params).then(() => {
+    request.post($form.attr('action') || '', params).then(() => {
       Notification.success(i18n('Successfully attended'));
       delay(1000).then(() => window.location.reload());
     }).catch((e) => {

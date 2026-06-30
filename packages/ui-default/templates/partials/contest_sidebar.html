@@ -46,7 +46,7 @@
     {% if handler.user.hasPerm(perm.PERM_ATTEND_CONTEST) and handler.user.hasPriv(PRIV.PRIV_USER_PROFILE) %}
       {% set team_vdocs = team_vdocs|default([]) %}
       {% set teamDisabled = not tdoc.allowTeam or not team_vdocs.length %}
-      <form action="{{ url('contest_detail', tid=tdoc.docId) }}" method="POST" data-contest-attend-form>
+      <form action="{{ url('contest_detail', tid=tdoc.docId) }}" method="POST" data-contest-attend-form{% if not teamDisabled or tdoc._code %} data-contest-needs-dialog{% endif %}>
         <input type="hidden" name="operation" value="attend">
         <button class="menu__link" data-contest-attend type="submit">
           <span class="icon icon-add"></span> {{ _('Attend Contest') }}
