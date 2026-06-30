@@ -125,8 +125,7 @@ export class JudgeResultCallbackContext {
         if (rdoc.contest) {
             const teamVid = await contest.getTeamVid(rdoc.domainId, rdoc.contest, rdoc.uid);
             await contest.updateStatus(rdoc.domainId, rdoc.contest, teamVid ?? rdoc.uid, rdoc._id, rdoc.pid, rdoc);
-        }
-        else if (accept && updated) await domain.incUserInDomain(rdoc.domainId, rdoc.uid, 'nAccept', 1);
+        } else if (accept && updated) await domain.incUserInDomain(rdoc.domainId, rdoc.uid, 'nAccept', 1);
         const isNormalSubmission = ![
             STATUS.STATUS_ETC, STATUS.STATUS_HACK_SUCCESSFUL, STATUS.STATUS_HACK_UNSUCCESSFUL,
             STATUS.STATUS_FORMAT_ERROR, STATUS.STATUS_SYSTEM_ERROR, STATUS.STATUS_CANCELED,

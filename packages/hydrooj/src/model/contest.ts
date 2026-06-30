@@ -85,6 +85,23 @@ export function isExtended(tdoc: Tdoc) {
     return tdoc.penaltySince.getTime() <= now && now < tdoc.endAt.getTime();
 }
 
+async function getScoreboardUdict(
+    tdoc: Tdoc, rankedTsdocs: [number, ContestStatusDoc][], uids: number[], showDisplayName: boolean,
+) {
+    const memberUids = tdoc.allowTeam
+        ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
+        : [];
+    const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], showDisplayName ? ['displayName'] : []);
+    if (tdoc.allowTeam) {
+        for (const [, tsdoc] of rankedTsdocs) {
+            if (tsdoc.members?.length && udict[tsdoc.uid]) {
+                (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.filter((uid) => udict[uid]);
+            }
+        }
+    }
+    return udict;
+}
+
 export function buildContestRule<T>(def: Optional<ContestRule<T>, 'applyProjection'>): ContestRule<T>;
 export function buildContestRule<T>(def: Partial<ContestRule<T>>, baseRule: ContestRule<T>): ContestRule<T>;
 export function buildContestRule<T>(def: Partial<ContestRule<T>>, baseRule: ContestRule<T> = {} as any) {
@@ -897,23 +914,6 @@ export function getMultiBalloon(domainId: string, tid: ObjectId, query: any = {}
 
 export async function updateBalloon(domainId: string, tid: ObjectId, _id: ObjectId, $set: any) {
     return await collBalloon.findOneAndUpdate({ domainId, tid, _id }, { $set });
-}
-
-async function getScoreboardUdict(
-    tdoc: Tdoc, rankedTsdocs: [number, ContestStatusDoc][], uids: number[], showDisplayName: boolean,
-) {
-    const memberUids = tdoc.allowTeam
-        ? rankedTsdocs.flatMap(([, tsdoc]) => tsdoc.members || [])
-        : [];
-    const udict = await UserModel.getListForRender(tdoc.domainId, [...uids, ...memberUids], showDisplayName ? ['displayName'] : []);
-    if (tdoc.allowTeam) {
-        for (const [, tsdoc] of rankedTsdocs) {
-            if (tsdoc.members?.length && udict[tsdoc.uid]) {
-                (udict[tsdoc.uid] as any).teamMembers = tsdoc.members.filter((uid) => udict[uid]);
-            }
-        }
-    }
-    return udict;
 }
 
 export async function getStatus(domainId: string, tid: ObjectId, uid: number) {
