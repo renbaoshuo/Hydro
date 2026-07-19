@@ -29,6 +29,7 @@ function normalizeIp(ip: string) {
 const QuickImportSchema = Schema.array(Schema.object({
     id: Schema.union([Schema.string().required(), Schema.number().required()]),
     name: Schema.string().required(),
+    displayName: Schema.string(),
     password: Schema.string(),
     school: Schema.string(),
     members: Schema.array(Schema.string()).default([]),
@@ -89,6 +90,12 @@ export function apply(ctx: Context, config: ReturnType<typeof Config>) {
     });
     ctx.on('handler/before', (that) => {
         if (typeof that.user.contestMode === 'string' && !['system', that.user.contestMode].includes(that.domain._id)) throw new ForbiddenError('Not available');
+    });
+    ctx.on('handler/before/HomeHandler#get', (that) => { // eslint-disable-line
+        if (typeof that.user.contestMode === 'string' && that.domain._id !== that.user.contestMode) {
+            that.response.redirect = `/d/${that.user.contestMode}/`;
+            return 'cleanup';
+        }
     });
 
     async function generateCdpZip(tdoc) {
@@ -307,8 +314,9 @@ export function apply(ctx: Context, config: ReturnType<typeof Config>) {
             if (line.member4) line.members.push(line.member4);
             const set: any = _.pick(line, 'school', 'members', 'coach', 'seat');
             if (line.school) set.avatar = `url:/avatars/${line.school.replace(/[ （）]/g, '')}.${format}`;
-            set.contestMode = true;
+            set.contestMode = domainId;
             await UserModel.setById(team._id, set);
+            if (line.displayName) await DomainModel.setUserInDomain(domainId, team._id, { displayName: line.displayName });
             for (const tdoc of tdocs) {
                 const tsdoc = await ContestModel.getStatus(domainId, tdoc.docId, team._id);
                 if (!tsdoc?.attend) await ContestModel.attend(domainId, tdoc.docId, team._id, 'rank' in line ? { unrank: !line.rank, subscribe: 1 } : { subscribe: 1 });
@@ -346,7 +354,7 @@ export function apply(ctx: Context, config: ReturnType<typeof Config>) {
     if (config.contestMode) {
         ctx.inject(['setting'], (c) => {
             c.setting.AccountSetting(
-                SettingModel.Setting('setting_info', 'contestMode', null, 'boolean', 'contestMode', 'Contest Mode', SettingModel.FLAG_DISABLED | SettingModel.FLAG_PUBLIC),
+                SettingModel.Setting('setting_info', 'contestMode', null, 'text', 'contestMode', 'Contest Mode', SettingModel.FLAG_DISABLED | SettingModel.FLAG_PUBLIC),
             );
         });
     }
