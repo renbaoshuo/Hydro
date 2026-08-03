@@ -981,10 +981,6 @@ export async function cancelAttend(domainId: string, tid: ObjectId, uid: number)
     return {};
 }
 
-export function getMultiStatus(domainId: string, query: any) {
-    return document.getMultiStatus(domainId, document.TYPE_CONTEST, query);
-}
-
 export function setStatus(domainId: string, tid: ObjectId, uid: number, $set?: any, $unset?: any) {
     return document.setStatus(domainId, document.TYPE_CONTEST, tid, uid, $set, $unset);
 }
