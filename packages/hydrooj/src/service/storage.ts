@@ -289,6 +289,20 @@ class RemoteStorageService {
         return { url, fields };
     }
 
+    async signUploadLink(target: string, size: number, contentType: string, checksum: string, expiresIn = 600): Promise<string> {
+        target = convertPath(target);
+        const url = await getSignedUrl(this.alternatives.user || this.client, new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: target,
+            ContentLength: size,
+            ContentType: contentType,
+            ChecksumAlgorithm: 'SHA256',
+            ChecksumSHA256: checksum,
+            Metadata: { 'Content-Type': contentType },
+        }), { expiresIn, signableHeaders: new Set(['content-type']) });
+        return this.replaceWithAlternativeUrlFor.user?.(url) || url;
+    }
+
     async status() {
         return {
             type: 'S3',
@@ -377,6 +391,10 @@ class LocalStorageService {
 
     async signUpload() {
         throw new Error('Not implemented');
+    }
+
+    async signUploadLink(_target: string, _size: number, _contentType: string, _checksum: string, _expiresIn = 600): Promise<string> {
+        throw new Error('Direct uploads require S3 file storage');
     }
 
     async status() {
