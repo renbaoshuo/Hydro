@@ -125,6 +125,10 @@ class RemoteStorageService {
                     accessKeyId: accessKey,
                     secretAccessKey: secretKey,
                 },
+                requestHandler: {
+                    httpAgent: { keepAlive: true, maxSockets: 500 },
+                    httpsAgent: { keepAlive: true, maxSockets: 500 },
+                },
             };
             this.client = new S3Client({
                 endpoint: endPoint,
