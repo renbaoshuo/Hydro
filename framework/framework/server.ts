@@ -14,7 +14,7 @@ import Schema from 'schemastery';
 import { Shorty } from 'shorty.js';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
-    Counter, errorMessage, isClass, Logger, parseMemoryMB,
+    Counter, errorMessage, isClass, Logger, parseMemoryMB, unwrapAggregateError,
 } from '@hydrooj/utils/lib/utils';
 import base from './base';
 import * as decorators from './decorators';
@@ -255,6 +255,7 @@ export class Handler extends HandlerCommon {
     }
 
     async onerror(error: HydroError) {
+        error = unwrapAggregateError(error);
         error.msg ||= () => error.message;
         console.error(`Error on user request: ${error.msg()}\n`, error);
         if (error instanceof UserFacingError && !process.env.DEV) error.stack = '';
@@ -401,9 +402,9 @@ export class WebService extends Service<never> {
                         c.set('Access-Control-Allow-Headers', corsAllowHeaders);
                         if (c.request.headers.origin) {
                             c.set('Access-Control-Allow-Origin', c.request.headers.origin);
-                            c.set('Vary', 'Origin');
+                            c.vary('Origin');
                         } else {
-                            c.set('Vary', 'Referer');
+                            c.vary('Referer');
                         }
                         c.cors = true;
                     }
@@ -601,11 +602,12 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                 } else current++;
             }
         } catch (e) {
+            const error = unwrapAggregateError(e);
             try {
                 // FIXME: should pass type check
-                await (this.ctx.serial as any)(`handler/error/${name}`, h, e);
-                await (this.ctx.serial as any)('handler/error', h, e);
-                await h.onerror(e);
+                await (this.ctx.serial as any)(`handler/error/${name}`, h, error);
+                await (this.ctx.serial as any)('handler/error', h, error);
+                await h.onerror(error);
             } catch (err) {
                 logger.error(err);
                 h.response.status = 500;
@@ -726,7 +728,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             }
         } catch (e) {
             // error during initialization (prepare, hooks)
-            await clean(e);
+            await clean(unwrapAggregateError(e));
         }
     }
 

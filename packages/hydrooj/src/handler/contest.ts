@@ -13,7 +13,8 @@ import {
     BadRequestError, ContestAlreadyAttendedError, ContestAlreadyStartedError, ContestNotAttendedError, ContestNotEndedError,
     ContestNotFoundError, ContestNotLiveError, ContestScoreboardHiddenError, FileLimitExceededError, FileUploadError,
     InvalidTokenError, MethodNotAllowedError, NotAssignedError, NotFoundError, PermissionError, TeamMemberLimitError,
-ValidationError, } from '../error';
+    ValidationError,
+} from '../error';
 import { ContestStatusDoc, FileInfo, ScoreboardConfig, Tdoc } from '../interface';
 import { PERM, PRIV, STATUS } from '../model/builtin';
 import * as contest from '../model/contest';
@@ -1015,7 +1016,9 @@ class ContestTeamHandler extends Handler {
     @param('name', Types.String)
     async postRename(domainId: string, vuid: number, name: string) {
         await this.mustMember(vuid);
-        await user.updateVuserById(vuid, { $set: { displayName: name.trim() } });
+        const displayName = name.trim();
+        if (!displayName) throw new ValidationError('name');
+        await user.updateVuserById(vuid, { $set: { displayName } });
         this.back();
     }
 
